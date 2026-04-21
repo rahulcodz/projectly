@@ -219,9 +219,6 @@ export default function UsersPage() {
     if (form.name.trim().length < 2) errs.name = "Name must be at least 2 characters";
     const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRx.test(form.email.trim())) errs.email = "Enter a valid email";
-    if (!editingId && form.password.length < 6) {
-      errs.password = "Password must be at least 6 characters";
-    }
     return errs;
   }
 
@@ -242,7 +239,7 @@ export default function UsersPage() {
       const method = isEdit ? "PATCH" : "POST";
 
       const payload: Partial<FormState> = { ...form };
-      if (isEdit && !payload.password) delete payload.password;
+      delete payload.password;
 
       const res = await fetch(url, {
         method,
@@ -261,7 +258,14 @@ export default function UsersPage() {
         return;
       }
 
-      toast.success(isEdit ? "User updated" : "User created");
+      const data = await res.json().catch(() => ({}));
+      if (isEdit) {
+        toast.success("User updated");
+      } else if (data?.warning) {
+        toast.warning(data.warning);
+      } else {
+        toast.success(`Invite email sent to ${form.email}`);
+      }
       setDialogOpen(false);
       await loadUsers();
     } catch (err) {
@@ -352,7 +356,7 @@ export default function UsersPage() {
           Team members
         </h1>
         <Button onClick={openCreate} className="w-full sm:w-auto">
-          <Plus className="mr-2 size-4" /> Add user
+          <Plus className="mr-2 size-4" /> Invite user
         </Button>
       </div>
 
@@ -610,12 +614,12 @@ export default function UsersPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
               <DialogTitle>
-                {editingId ? "Edit user" : "Add new user"}
+                {editingId ? "Edit user" : "Invite new user"}
               </DialogTitle>
               <DialogDescription>
                 {editingId
                   ? "Update name, email, role, and status. Use the key icon on a row to change the password."
-                  : "Create a new team member and assign a role."}
+                  : "Send an invite email. The user sets their own password via a secure link."}
               </DialogDescription>
             </DialogHeader>
 
@@ -665,37 +669,9 @@ export default function UsersPage() {
             </div>
 
             {!editingId && (
-              <div className="grid gap-1.5">
-                <Label htmlFor="password">
-                  Password
-                  <RequiredMark />
-                </Label>
-                <InputGroup
-                  className={controlClasses}
-                  aria-invalid={formErrors.password ? true : undefined}
-                >
-                  <InputGroupInput
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(e) => {
-                      setForm({ ...form, password: e.target.value });
-                      if (formErrors.password)
-                        setFormErrors((p) => ({ ...p, password: "" }));
-                    }}
-                    placeholder="Minimum 6 characters"
-                  />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      size="icon-sm"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                      onClick={() => setShowPassword((v) => !v)}
-                    >
-                      {showPassword ? <EyeOff /> : <Eye />}
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
-                <FieldError reserve message={formErrors.password} />
+              <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                An invite email with a password setup link will be sent to this
+                address. The user activates their account from the link.
               </div>
             )}
 

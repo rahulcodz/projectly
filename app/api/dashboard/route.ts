@@ -18,6 +18,13 @@ export async function GET(_req: NextRequest) {
     const userObjectId = new mongoose.Types.ObjectId(session.sub);
 
     if (role === "user") {
+      const projectVisibility = {
+        $or: [
+          { assignees: userObjectId },
+          { reportingTo: userObjectId },
+        ],
+      };
+
       const [
         projectsAssigned,
         tasksTotal,
@@ -25,13 +32,13 @@ export async function GET(_req: NextRequest) {
         recentProjects,
         recentTasks,
       ] = await Promise.all([
-        Project.countDocuments({ assignees: userObjectId }),
+        Project.countDocuments(projectVisibility),
         Task.countDocuments({ assignees: userObjectId }),
         Task.aggregate([
           { $match: { assignees: userObjectId } },
           { $group: { _id: "$status", count: { $sum: 1 } } },
         ]),
-        Project.find({ assignees: userObjectId })
+        Project.find(projectVisibility)
           .sort({ updatedAt: -1 })
           .limit(5)
           .select("name projectId status updatedAt")

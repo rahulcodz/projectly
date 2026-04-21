@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
-import Task, { TASK_STATUSES } from "@/models/Task";
+import Task, { TASK_STATUSES, TASK_STATUS_LABELS } from "@/models/Task";
 import { getSession } from "@/lib/auth";
 import { getProjectForSession } from "@/lib/project-access";
 import { fieldError, validationResponse } from "@/lib/api-errors";
 import { sanitizeRichHtml } from "@/lib/sanitize";
+import { getAppUrl, sendTaskAssignedEmail } from "@/lib/mailer";
 
 const createSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
@@ -89,6 +90,55 @@ export async function POST(
       .populate("assignees", "name email role")
       .populate("reportingPersons", "name email role")
       .lean();
+
+    if (populated) {
+      try {
+        const taskUrl = `${getAppUrl()}/dashboard/projects/${String(
+          project._id
+        )}?task=${String(populated._id)}`;
+        const projectMeta = {
+          _id: String(project._id),
+          name: project.name,
+          projectId: project.projectId,
+        };
+        const taskMeta = {
+          title: populated.title,
+          status: TASK_STATUS_LABELS[populated.status] ?? populated.status,
+        };
+        type U = { _id: unknown; name: string; email: string };
+        const recipients: {
+          user: U;
+          role: "assignee" | "reportingPerson";
+        }[] = [];
+        for (const u of (populated.assignees ?? []) as unknown as U[]) {
+          if (u && String(u._id) !== session.sub) {
+            recipients.push({ user: u, role: "assignee" });
+          }
+        }
+        for (const u of (populated.reportingPersons ??
+          []) as unknown as U[]) {
+          if (u && String(u._id) !== session.sub) {
+            recipients.push({ user: u, role: "reportingPerson" });
+          }
+        }
+
+        Promise.allSettled(
+          recipients.map((r) =>
+            sendTaskAssignedEmail({
+              to: r.user.email,
+              recipientName: r.user.name,
+              actorName: session.name,
+              task: taskMeta,
+              project: projectMeta,
+              taskUrl,
+              role: r.role,
+            })
+          )
+        ).catch(() => {});
+      } catch {
+        // swallow mail errors
+      }
+    }
 
     return NextResponse.json({ task: populated }, { status: 201 });
   } catch (err) {

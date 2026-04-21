@@ -6,6 +6,10 @@ import Project from "@/models/Project";
 import { nextSeq, peekSeq } from "@/models/Counter";
 import { getSession } from "@/lib/auth";
 import { fieldError, validationResponse } from "@/lib/api-errors";
+import {
+  getAppUrl,
+  sendProjectAssignedEmail,
+} from "@/lib/mailer";
 
 const createSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters"),
@@ -49,9 +53,11 @@ export async function GET(req: NextRequest) {
     }
 
     const filter: Record<string, unknown> = {};
+    const and: Record<string, unknown>[] = [];
 
     if (session.role === "user") {
-      filter.assignees = new mongoose.Types.ObjectId(session.sub);
+      const uid = new mongoose.Types.ObjectId(session.sub);
+      and.push({ $or: [{ assignees: uid }, { reportingTo: uid }] });
     }
 
     if (status === "active" || status === "inactive") {
@@ -60,8 +66,10 @@ export async function GET(req: NextRequest) {
 
     if (q) {
       const rx = new RegExp(escapeRegex(q), "i");
-      filter.$or = [{ name: rx }, { projectId: rx }];
+      and.push({ $or: [{ name: rx }, { projectId: rx }] });
     }
+
+    if (and.length > 0) filter.$and = and;
 
     const [projects, total] = await Promise.all([
       Project.find(filter)
@@ -133,6 +141,41 @@ export async function POST(req: NextRequest) {
       .populate("reportingTo", "name email role")
       .populate("assignees", "name email role")
       .lean();
+
+    if (populated) {
+      const projectUrl = `${getAppUrl()}/dashboard/projects/${String(
+        populated._id
+      )}`;
+      const actorName = session.name;
+      type P = { _id: unknown; name: string; email: string };
+      const recipients: { user: P; role: "assignee" | "reportingTo" }[] = [];
+      for (const a of (populated.assignees ?? []) as unknown as P[]) {
+        if (a && String(a._id) !== session.sub) {
+          recipients.push({ user: a, role: "assignee" });
+        }
+      }
+      const rt = populated.reportingTo as unknown as P | null;
+      if (rt && String(rt._id) !== session.sub) {
+        recipients.push({ user: rt, role: "reportingTo" });
+      }
+
+      Promise.allSettled(
+        recipients.map((r) =>
+          sendProjectAssignedEmail({
+            to: r.user.email,
+            recipientName: r.user.name,
+            actorName,
+            project: {
+              name: populated.name,
+              projectId: populated.projectId,
+              status: populated.status,
+            },
+            projectUrl,
+            role: r.role,
+          })
+        )
+      ).catch(() => {});
+    }
 
     return NextResponse.json({ project: populated }, { status: 201 });
   } catch (err) {

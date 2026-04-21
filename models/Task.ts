@@ -19,6 +19,14 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   done: "Done",
 };
 
+const SubtaskSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true },
+    completed: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
 const TaskSchema = new Schema(
   {
     project: {
@@ -42,6 +50,7 @@ const TaskSchema = new Schema(
     },
     assignees: [{ type: Schema.Types.ObjectId, ref: "User" }],
     reportingPersons: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    subtasks: { type: [SubtaskSchema], default: [] },
   },
   { timestamps: true }
 );
@@ -49,8 +58,10 @@ const TaskSchema = new Schema(
 export type TaskShape = InferSchemaType<typeof TaskSchema>;
 export type TaskDoc = TaskShape & { _id: mongoose.Types.ObjectId };
 
-const Task: Model<TaskDoc> =
-  (mongoose.models.Task as Model<TaskDoc>) ||
-  mongoose.model<TaskDoc>("Task", TaskSchema);
+if (mongoose.models.Task) {
+  mongoose.deleteModel("Task");
+}
+
+const Task: Model<TaskDoc> = mongoose.model<TaskDoc>("Task", TaskSchema);
 
 export default Task;

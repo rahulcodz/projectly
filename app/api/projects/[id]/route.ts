@@ -3,8 +3,14 @@ import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import Project from "@/models/Project";
+import User from "@/models/User";
 import { getSession } from "@/lib/auth";
 import { fieldError, validationResponse } from "@/lib/api-errors";
+import {
+  getAppUrl,
+  sendProjectAssignedEmail,
+  sendProjectUnassignedEmail,
+} from "@/lib/mailer";
 
 const updateSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters").optional(),
@@ -43,7 +49,15 @@ export async function GET(
       const assigneeIds = (project.assignees ?? []).map((a) =>
         String((a as unknown as { _id: unknown })._id ?? a)
       );
-      if (!assigneeIds.includes(session.sub)) {
+      const reportingToId = project.reportingTo
+        ? String(
+            (project.reportingTo as unknown as { _id: unknown })._id ??
+              project.reportingTo
+          )
+        : null;
+      const isAssignee = assigneeIds.includes(session.sub);
+      const isReportingTo = reportingToId === session.sub;
+      if (!isAssignee && !isReportingTo) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }
@@ -88,6 +102,11 @@ export async function PATCH(
 
     await connectDB();
 
+    const prev = await Project.findById(id).lean();
+    if (!prev) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
     const update: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) update.name = parsed.data.name;
     if (parsed.data.status !== undefined) update.status = parsed.data.status;
@@ -106,6 +125,126 @@ export async function PATCH(
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    // Diff assignees + reportingTo, email recipients.
+    try {
+      const prevAssignees = new Set(
+        (prev.assignees ?? []).map((a) => String(a))
+      );
+      const nextAssigneesArr = parsed.data.assignees ?? null;
+      const nextAssignees = nextAssigneesArr
+        ? new Set(nextAssigneesArr)
+        : prevAssignees;
+
+      const addedAssignees: string[] = [];
+      const removedAssignees: string[] = [];
+      if (nextAssigneesArr) {
+        for (const id of nextAssignees)
+          if (!prevAssignees.has(id)) addedAssignees.push(id);
+        for (const id of prevAssignees)
+          if (!nextAssignees.has(id)) removedAssignees.push(id);
+      }
+
+      const prevRt = prev.reportingTo ? String(prev.reportingTo) : null;
+      const nextRt =
+        parsed.data.reportingTo !== undefined
+          ? parsed.data.reportingTo
+          : prevRt;
+      const rtAdded = nextRt && nextRt !== prevRt ? nextRt : null;
+      const rtRemoved = prevRt && prevRt !== nextRt ? prevRt : null;
+
+      const ids = Array.from(
+        new Set(
+          [...addedAssignees, ...removedAssignees, rtAdded, rtRemoved].filter(
+            Boolean
+          ) as string[]
+        )
+      );
+
+      if (ids.length > 0) {
+        const users = await User.find({ _id: { $in: ids } })
+          .select("name email")
+          .lean();
+        const byId = new Map(users.map((u) => [String(u._id), u]));
+
+        const projectUrl = `${getAppUrl()}/dashboard/projects/${String(
+          project._id
+        )}`;
+        const projectMeta = {
+          name: project.name,
+          projectId: project.projectId,
+          status: project.status,
+        };
+        const actorName = session.name;
+
+        const tasks: Promise<unknown>[] = [];
+
+        for (const uid of addedAssignees) {
+          if (uid === session.sub) continue;
+          const u = byId.get(uid);
+          if (!u) continue;
+          tasks.push(
+            sendProjectAssignedEmail({
+              to: u.email,
+              recipientName: u.name,
+              actorName,
+              project: projectMeta,
+              projectUrl,
+              role: "assignee",
+            })
+          );
+        }
+        for (const uid of removedAssignees) {
+          if (uid === session.sub) continue;
+          const u = byId.get(uid);
+          if (!u) continue;
+          tasks.push(
+            sendProjectUnassignedEmail({
+              to: u.email,
+              recipientName: u.name,
+              actorName,
+              project: projectMeta,
+              projectUrl,
+              role: "assignee",
+            })
+          );
+        }
+        if (rtAdded && rtAdded !== session.sub) {
+          const u = byId.get(rtAdded);
+          if (u) {
+            tasks.push(
+              sendProjectAssignedEmail({
+                to: u.email,
+                recipientName: u.name,
+                actorName,
+                project: projectMeta,
+                projectUrl,
+                role: "reportingTo",
+              })
+            );
+          }
+        }
+        if (rtRemoved && rtRemoved !== session.sub) {
+          const u = byId.get(rtRemoved);
+          if (u) {
+            tasks.push(
+              sendProjectUnassignedEmail({
+                to: u.email,
+                recipientName: u.name,
+                actorName,
+                project: projectMeta,
+                projectUrl,
+                role: "reportingTo",
+              })
+            );
+          }
+        }
+
+        Promise.allSettled(tasks).catch(() => {});
+      }
+    } catch {
+      // swallow mail diff errors
     }
 
     return NextResponse.json({ project });

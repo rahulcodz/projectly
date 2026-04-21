@@ -110,6 +110,12 @@ type Project = {
   updatedAt?: string;
 };
 
+type Subtask = {
+  _id: string;
+  title: string;
+  completed: boolean;
+};
+
 type Task = {
   _id: string;
   title: string;
@@ -118,6 +124,7 @@ type Task = {
   createdBy: UserLite | null;
   assignees: UserLite[];
   reportingPersons: UserLite[];
+  subtasks?: Subtask[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -556,6 +563,15 @@ export default function ProjectDetailPage() {
   async function moveTask(taskId: string, newStatus: TaskStatusKey) {
     const existing = tasks.find((t) => t._id === taskId);
     if (!existing || existing.status === newStatus) return;
+
+    if (newStatus === "done") {
+      const subs = existing.subtasks ?? [];
+      if (subs.length > 0 && subs.some((s) => !s.completed)) {
+        toast.error("Complete all subtasks before marking task done");
+        return;
+      }
+    }
+
     const prev = tasks;
     setTasks((ts) =>
       ts.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t))
@@ -574,6 +590,43 @@ export default function ProjectDetailPage() {
     } catch (err) {
       setTasks(prev);
       toast.error(err instanceof Error ? err.message : "Failed to update status");
+    }
+  }
+
+  async function saveSubtasks(taskId: string, nextSubtasks: Subtask[]) {
+    const prev = tasks;
+    setTasks((ts) =>
+      ts.map((t) =>
+        t._id === taskId ? { ...t, subtasks: nextSubtasks } : t
+      )
+    );
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subtasks: nextSubtasks.map((s) => ({
+            _id: s._id.startsWith("tmp-") ? undefined : s._id,
+            title: s.title,
+            completed: s.completed,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTasks(prev);
+        toast.error(data.error || "Failed to update subtasks");
+        return;
+      }
+      const serverSubtasks = (data.task?.subtasks ?? []) as Subtask[];
+      setTasks((ts) =>
+        ts.map((t) =>
+          t._id === taskId ? { ...t, subtasks: serverSubtasks } : t
+        )
+      );
+    } catch (err) {
+      setTasks(prev);
+      toast.error(err instanceof Error ? err.message : "Failed to update subtasks");
     }
   }
 
@@ -1120,18 +1173,68 @@ export default function ProjectDetailPage() {
                 <div>
                   <div className="flex items-center gap-2 border-b border-border/40 px-4 pb-3 sm:px-6">
                     <MessageSquare className="size-4 text-muted-foreground" />
-                    <h2 className="min-w-0 truncate text-sm font-semibold">
+                    <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
                       {t.title}
                     </h2>
-                    <TaskStatusBadge status={t.status} />
                     <button
                       type="button"
                       onClick={() => closeTaskTab(t._id)}
-                      className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                     >
                       <X className="size-3.5" />
                       Close tab
                     </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 border-b border-border/40 px-4 py-3 sm:px-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Status
+                      </span>
+                      <Select
+                        value={t.status}
+                        onValueChange={(v) =>
+                          moveTask(t._id, v as TaskStatusKey)
+                        }
+                      >
+                        <SelectTrigger
+                          size="sm"
+                          className={cn(
+                            "h-7 w-[140px] gap-1.5 border-transparent px-2 text-xs font-medium shadow-none hover:border-border",
+                            TASK_STATUS_STYLES[t.status].cls
+                          )}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BOARD_COLUMNS.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "size-1.5 rounded-full",
+                                    TASK_STATUS_STYLES[s].dot
+                                  )}
+                                />
+                                {TASK_STATUS_STYLES[s].label}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Assignees
+                      </span>
+                      <TaskAssigneeRow
+                        selected={t.assignees}
+                        options={project.assignees}
+                        onChange={(next) =>
+                          updateTaskAssignees(t._id, next)
+                        }
+                      />
+                    </div>
                   </div>
 
                   <div className="border-b border-border/40 px-4 py-4 sm:px-6">
@@ -1158,6 +1261,11 @@ export default function ProjectDetailPage() {
                       </p>
                     )}
                   </div>
+
+                  <SubtaskPanel
+                    task={t}
+                    onSave={(next) => saveSubtasks(t._id, next)}
+                  />
 
                   {state.loading ? (
                     <div className="space-y-4 p-4">
@@ -1439,6 +1547,173 @@ export default function ProjectDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function SubtaskPanel({
+  task,
+  onSave,
+}: {
+  task: Task;
+  onSave: (next: Subtask[]) => void | Promise<void>;
+}) {
+  const subtasks = task.subtasks ?? [];
+  const total = subtasks.length;
+  const done = subtasks.filter((s) => s.completed).length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  const allDone = total > 0 && done === total;
+
+  const [draft, setDraft] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<Subtask | null>(null);
+
+  function addSubtask(e: React.FormEvent) {
+    e.preventDefault();
+    const title = draft.trim();
+    if (title.length === 0) return;
+    const next: Subtask[] = [
+      ...subtasks,
+      { _id: `tmp-${Date.now()}`, title, completed: false },
+    ];
+    setDraft("");
+    setAdding(false);
+    onSave(next);
+  }
+
+  function toggle(id: string) {
+    const next = subtasks.map((s) =>
+      s._id === id ? { ...s, completed: !s.completed } : s
+    );
+    onSave(next);
+  }
+
+  function confirmRemove() {
+    if (!pendingRemove) return;
+    const id = pendingRemove._id;
+    setPendingRemove(null);
+    onSave(subtasks.filter((s) => s._id !== id));
+  }
+
+  return (
+    <div className="border-b border-border/40 px-4 py-4 sm:px-6">
+      <div className="mb-3 flex items-center gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Subtasks
+        </h3>
+        <span className="rounded-full border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          {done}/{total}
+        </span>
+        {total > 0 && (
+          <div className="h-1.5 max-w-40 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                allDone ? "bg-emerald-500" : "bg-primary"
+              )}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+        {task.status !== "done" && total > 0 && !allDone && (
+          <span className="ml-auto text-[11px] text-muted-foreground">
+            Task can&apos;t be Done until all subtasks complete
+          </span>
+        )}
+      </div>
+
+      {total > 0 && (
+        <ul className="mb-2 flex flex-col gap-1">
+          {subtasks.map((s) => (
+            <li
+              key={s._id}
+              className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-muted/40"
+            >
+              <input
+                type="checkbox"
+                checked={s.completed}
+                onChange={() => toggle(s._id)}
+                className="size-4 accent-primary"
+              />
+              <span
+                className={cn(
+                  "flex-1 text-sm",
+                  s.completed && "text-muted-foreground line-through"
+                )}
+              >
+                {s.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPendingRemove(s)}
+                aria-label="Remove subtask"
+                className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+              >
+                <X className="size-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <AlertDialog
+        open={Boolean(pendingRemove)}
+        onOpenChange={(open) => !open && setPendingRemove(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this subtask?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRemove
+                ? `"${pendingRemove.title}" will be permanently removed from this task.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRemove}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {adding ? (
+        <form onSubmit={addSubtask} className="flex items-center gap-2">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="New subtask"
+            autoFocus
+            className="h-8 shadow-none"
+          />
+          <Button type="submit" size="sm" disabled={draft.trim().length === 0}>
+            Add
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setDraft("");
+              setAdding(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
+        >
+          <Plus className="size-3.5" /> Add subtask
+        </button>
+      )}
     </div>
   );
 }
