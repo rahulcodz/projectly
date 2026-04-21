@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CalendarDays,
@@ -12,7 +12,6 @@ import {
   List as ListIcon,
   ListChecks,
   MessageSquare,
-  Pencil,
   Plus,
   Search,
   Send,
@@ -59,7 +58,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   RoleBadge,
-  StatusBadge,
   TASK_STATUS_STYLES,
   TaskStatusBadge,
   type TaskStatusKey,
@@ -124,6 +122,12 @@ type Task = {
   updatedAt?: string;
 };
 
+const chromeTabClasses = cn(
+  "group relative -mb-[2px] h-10 flex-none items-center gap-1.5 rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 text-sm font-medium text-muted-foreground shadow-none",
+  "hover:text-foreground",
+  "data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+);
+
 const BOARD_COLUMNS: TaskStatusKey[] = [
   "backlog",
   "todo",
@@ -132,6 +136,24 @@ const BOARD_COLUMNS: TaskStatusKey[] = [
   "qa",
   "done",
 ];
+
+const STATUS_TAB_ACTIVE: Record<TaskStatusKey, string> = {
+  backlog: "data-[state=active]:bg-muted/70",
+  todo: "data-[state=active]:bg-sky-500/20",
+  in_progress: "data-[state=active]:bg-amber-500/20",
+  in_review: "data-[state=active]:bg-violet-500/20",
+  qa: "data-[state=active]:bg-cyan-500/20",
+  done: "data-[state=active]:bg-emerald-500/20",
+};
+
+const STATUS_ROW_BG: Record<TaskStatusKey, string> = {
+  backlog: "bg-muted/30",
+  todo: "bg-sky-500/5 dark:bg-sky-500/10",
+  in_progress: "bg-amber-500/5 dark:bg-amber-500/10",
+  in_review: "bg-violet-500/5 dark:bg-violet-500/10",
+  qa: "bg-cyan-500/5 dark:bg-cyan-500/10",
+  done: "bg-emerald-500/5 dark:bg-emerald-500/10",
+};
 
 type Session = {
   _id: string;
@@ -154,7 +176,8 @@ function formatDate(iso?: string) {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const taskParam = searchParams?.get("task") ?? null;
   const id = params?.id;
 
   const [project, setProject] = useState<Project | null>(null);
@@ -169,8 +192,10 @@ export default function ProjectDetailPage() {
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
   const [taskStatus, setTaskStatus] = useState<TaskStatusKey>("todo");
-  const [view, setView] = useState<"list" | "board">("board");
-  const [tab, setTab] = useState<string>("overview");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [listPage, setListPage] = useState(1);
+  const LIST_PAGE_SIZE = 10;
+  const [tab, setTab] = useState<string>("tasks");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatusKey | null>(null);
 
@@ -327,6 +352,55 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (project) loadProjComments();
   }, [project, loadProjComments]);
+
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (!project || hydratedRef.current) return;
+    hydratedRef.current = true;
+    if (typeof window === "undefined") return;
+    try {
+      sessionStorage.removeItem(`projectly:tabs:${project._id}`);
+    } catch {}
+    if (taskParam) {
+      setOpenTaskIds([taskParam]);
+      setTaskTabs({
+        [taskParam]: {
+          comments: [],
+          loading: true,
+          draft: "",
+          composerOpen: false,
+          alert: null,
+          posting: false,
+        },
+      });
+      setTab(`task:${taskParam}`);
+      loadTaskComments(taskParam);
+    } else {
+      setOpenTaskIds([]);
+      setTaskTabs({});
+      setTab("tasks");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+
+  useEffect(() => {
+    if (!project || !hydratedRef.current) return;
+    if (typeof window === "undefined") return;
+    try {
+      const drafts: Record<string, { draft: string; composerOpen: boolean }> = {};
+      openTaskIds.forEach((tid) => {
+        const s = taskTabs[tid];
+        if (s) {
+          drafts[tid] = { draft: s.draft, composerOpen: s.composerOpen };
+        }
+      });
+      sessionStorage.setItem(
+        `projectly:tabs:${project._id}`,
+        JSON.stringify({ openTaskIds, tab, drafts })
+      );
+    } catch {}
+  }, [project, openTaskIds, tab, taskTabs]);
 
   async function loadTaskComments(taskId: string) {
     updateTaskTab(taskId, { loading: true });
@@ -563,31 +637,33 @@ export default function ProjectDetailPage() {
     .filter((t): t is Task => Boolean(t));
 
   return (
-    <div className="flex flex-col gap-4">
-      <Link
-        href="/dashboard/projects"
-        className="inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> Back to projects
-      </Link>
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="-mx-4 -my-6 flex min-h-[calc(100vh-3.5rem)] flex-col sm:-mx-6 sm:-my-8">
+      <div className="grid flex-1 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
         <Tabs
           value={tab}
           onValueChange={(v) => setTab(v as typeof tab)}
           className="min-w-0"
         >
-          <div className="overflow-x-auto">
-            <TabsList className="h-auto flex-wrap justify-start">
-              <TabsTrigger value="overview">
-                <FolderKanban className="mr-1.5 size-4" /> Overview
-                <span className="ml-1.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
+          <div className="relative">
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b-2 border-border/60 bg-transparent px-4 py-0 shadow-none sm:px-6">
+              <TabsTrigger
+                value="overview"
+                className={cn(chromeTabClasses, "bg-primary/10 data-[state=active]:bg-primary/15")}
+              >
+                <FolderKanban className="size-4 text-muted-foreground group-data-[state=active]:text-primary" />
+                <span>Overview</span>
+                <span className="ml-0.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
                   {projCommentsLoading ? "…" : projComments.length}
                 </span>
               </TabsTrigger>
-              <TabsTrigger value="tasks">
-                <ListChecks className="mr-1.5 size-4" /> Tasks
-                <span className="ml-1.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
+              <TabsTrigger
+                value="tasks"
+                className={cn(chromeTabClasses, "bg-primary/10 data-[state=active]:bg-primary/15")}
+              >
+                <ListChecks className="size-4 text-muted-foreground group-data-[state=active]:text-primary" />
+                <span>Tasks</span>
+                <span className="ml-0.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
                   {tasksLoading ? "…" : tasks.length}
                 </span>
               </TabsTrigger>
@@ -595,15 +671,20 @@ export default function ProjectDetailPage() {
                 <TabsTrigger
                   key={t._id}
                   value={`task:${t._id}`}
-                  className="group relative gap-1.5 pr-7"
+                  className={cn(
+                    chromeTabClasses,
+                    "pr-1.5",
+                    TASK_STATUS_STYLES[t.status].card,
+                    STATUS_TAB_ACTIVE[t.status]
+                  )}
                 >
                   <span
                     className={cn(
-                      "size-1.5 rounded-full",
+                      "size-2 rounded-full",
                       TASK_STATUS_STYLES[t.status].dot
                     )}
                   />
-                  <span className="max-w-[140px] truncate">{t.title}</span>
+                  <span className="max-w-[160px] truncate">{t.title}</span>
                   <span
                     role="button"
                     tabIndex={-1}
@@ -614,18 +695,29 @@ export default function ProjectDetailPage() {
                       closeTaskTab(t._id);
                     }}
                     onMouseDown={(e) => e.stopPropagation()}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 flex size-4 cursor-pointer items-center justify-center rounded hover:bg-muted-foreground/20"
+                    className="ml-1 flex size-5 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground"
                   >
-                    <X className="size-3" />
+                    <X className="size-3.5" />
                   </span>
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
 
-          <TabsContent value="overview" className="mt-3">
-            <div className="rounded-lg border">
-              <div className="flex items-center gap-2 border-b p-3">
+          <TabsContent value="overview" className="mt-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/40 px-4 pb-4 text-base sm:px-6">
+                <span>
+                  <span className="text-muted-foreground">Name:</span>{" "}
+                  <span className="font-semibold">{project.name}</span>
+                </span>
+                <span className="text-muted-foreground">|</span>
+                <span>
+                  <span className="text-muted-foreground">ID:</span>{" "}
+                  <span className="font-mono text-sm">{project.projectId}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 border-b border-border/40 px-4 pb-3 pt-4 sm:px-6">
                 <MessageSquare className="size-4 text-muted-foreground" />
                 <h2 className="text-sm font-semibold">Project thread</h2>
                 <span className="rounded-full border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -654,9 +746,9 @@ export default function ProjectDetailPage() {
                   </p>
                 </div>
               ) : (
-                <ul className="divide-y">
+                <ul className="divide-y divide-border/40">
                   {projComments.map((c) => (
-                    <li key={c._id} className="flex items-start gap-3 p-4">
+                    <li key={c._id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
                       <UserInitialsAvatar
                         name={c.author?.name ?? "?"}
                         className="size-8 text-[10px]"
@@ -680,7 +772,7 @@ export default function ProjectDetailPage() {
                 </ul>
               )}
 
-              <div className="border-t p-3">
+              <div className="border-t border-border/40 px-4 py-3 sm:px-6">
                 {!projComposerOpen ? (
                   <button
                     type="button"
@@ -727,9 +819,9 @@ export default function ProjectDetailPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="tasks" className="mt-3">
-            <div className="rounded-lg border">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
+          <TabsContent value="tasks" className="mt-4">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 px-4 pb-3 sm:px-6">
           <div className="flex items-center gap-2">
             <ListChecks className="size-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Tasks</h2>
@@ -778,7 +870,7 @@ export default function ProjectDetailPage() {
               ))}
             </div>
           ) : (
-            <ul className="divide-y">
+            <ul className="divide-y divide-border/40">
               {Array.from({ length: 3 }).map((_, i) => (
                 <li key={i} className="space-y-2 p-4">
                   <Skeleton className="h-4 w-56" />
@@ -797,7 +889,7 @@ export default function ProjectDetailPage() {
           </div>
         ) : view === "board" ? (
           <div className="overflow-x-auto">
-            <div className="flex gap-4 p-3 min-w-max">
+            <div className="flex gap-4 px-4 py-3 min-w-max sm:px-6">
               {BOARD_COLUMNS.map((col) => {
                 const colTasks = tasks.filter((t) => t.status === col);
                 const style = TASK_STATUS_STYLES[col];
@@ -823,7 +915,7 @@ export default function ProjectDetailPage() {
                       isOver && "ring-2 ring-primary/40"
                     )}
                   >
-                    <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+                    <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span
                           className={cn("size-2 rounded-full", style.dot)}
@@ -870,26 +962,31 @@ export default function ProjectDetailPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/60 hover:bg-muted/60">
-                  <TableHead className="border-r">Title</TableHead>
-                  <TableHead className="w-32 border-r">Status</TableHead>
-                  <TableHead className="w-40 border-r">Assignees</TableHead>
-                  <TableHead className="w-40 border-r">Reporting</TableHead>
-                  <TableHead className="w-36 border-r">Created by</TableHead>
-                  <TableHead className="w-40">Created</TableHead>
+                <TableRow className="border-border/40 bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Title</TableHead>
+                  <TableHead className="h-10 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</TableHead>
+                  <TableHead className="h-10 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignees</TableHead>
+                  <TableHead className="h-10 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reporting</TableHead>
+                  <TableHead className="h-10 w-36 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created by</TableHead>
+                  <TableHead className="h-10 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tasks.map((t) => (
+                {tasks
+                  .slice(
+                    (listPage - 1) * LIST_PAGE_SIZE,
+                    listPage * LIST_PAGE_SIZE
+                  )
+                  .map((t) => (
                   <TableRow
                     key={t._id}
                     className={cn(
-                      "cursor-pointer transition-colors hover:brightness-95 dark:hover:brightness-110",
-                      TASK_STATUS_STYLES[t.status].card
+                      "group cursor-pointer hover:bg-transparent",
+                      STATUS_ROW_BG[t.status]
                     )}
                     onClick={() => openTaskTab(t._id)}
                   >
-                    <TableCell className="border-r font-medium">
+                    <TableCell className="px-3 py-2.5 text-sm font-medium">
                       <button
                         type="button"
                         className="text-left hover:text-primary hover:underline"
@@ -901,11 +998,44 @@ export default function ProjectDetailPage() {
                         {t.title}
                       </button>
                     </TableCell>
-                    <TableCell className="border-r">
-                      <TaskStatusBadge status={t.status} />
+                    <TableCell
+                      className="px-3 py-2.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Select
+                        value={t.status}
+                        onValueChange={(v) =>
+                          moveTask(t._id, v as TaskStatusKey)
+                        }
+                      >
+                        <SelectTrigger
+                          size="sm"
+                          className={cn(
+                            "h-7 w-[130px] gap-1.5 border-transparent px-2 text-xs font-medium shadow-none hover:border-border",
+                            TASK_STATUS_STYLES[t.status].cls
+                          )}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BOARD_COLUMNS.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              <span className="flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "size-1.5 rounded-full",
+                                    TASK_STATUS_STYLES[s].dot
+                                  )}
+                                />
+                                {TASK_STATUS_STYLES[s].label}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell
-                      className="border-r"
+                      className="px-3 py-2.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <TaskAssigneeRow
@@ -914,23 +1044,65 @@ export default function ProjectDetailPage() {
                         onChange={(next) => updateTaskAssignees(t._id, next)}
                       />
                     </TableCell>
-                    <TableCell className="border-r">
+                    <TableCell className="px-3 py-2.5">
                       <AssigneeBadges
                         users={t.reportingPersons}
                         max={3}
                         size="sm"
                       />
                     </TableCell>
-                    <TableCell className="border-r text-sm text-muted-foreground">
+                    <TableCell className="px-3 py-2.5 text-sm text-muted-foreground">
                       {t.createdBy?.name ?? "—"}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
                       {formatDate(t.createdAt)}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            {tasks.length > LIST_PAGE_SIZE && (
+              <div className="flex items-center justify-between gap-3 border-t border-border/40 px-4 py-3 sm:px-6">
+                <span className="text-xs text-muted-foreground">
+                  Showing {(listPage - 1) * LIST_PAGE_SIZE + 1}-
+                  {Math.min(listPage * LIST_PAGE_SIZE, tasks.length)} of{" "}
+                  {tasks.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setListPage((p) => Math.max(1, p - 1))}
+                    disabled={listPage === 1}
+                  >
+                    Prev
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Page {listPage} /{" "}
+                    {Math.max(1, Math.ceil(tasks.length / LIST_PAGE_SIZE))}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setListPage((p) =>
+                        Math.min(
+                          Math.ceil(tasks.length / LIST_PAGE_SIZE),
+                          p + 1
+                        )
+                      )
+                    }
+                    disabled={
+                      listPage >= Math.ceil(tasks.length / LIST_PAGE_SIZE)
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
             </div>
@@ -943,10 +1115,10 @@ export default function ProjectDetailPage() {
               <TabsContent
                 key={t._id}
                 value={`task:${t._id}`}
-                className="mt-3"
+                className="mt-4"
               >
-                <div className="rounded-lg border">
-                  <div className="flex items-center gap-2 border-b p-3">
+                <div>
+                  <div className="flex items-center gap-2 border-b border-border/40 px-4 pb-3 sm:px-6">
                     <MessageSquare className="size-4 text-muted-foreground" />
                     <h2 className="min-w-0 truncate text-sm font-semibold">
                       {t.title}
@@ -962,18 +1134,20 @@ export default function ProjectDetailPage() {
                     </button>
                   </div>
 
-                  <div className="border-b p-4">
+                  <div className="border-b border-border/40 px-4 py-4 sm:px-6">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      {t.createdBy && <span>By {t.createdBy.name}</span>}
-                      <span>· {formatDate(t.createdAt)}</span>
-                      {t.assignees.length > 0 && (
-                        <span className="ml-2">
-                          <AssigneeBadges
-                            users={t.assignees}
-                            max={5}
-                            size="sm"
+                      {t.createdBy && (
+                        <>
+                          <span>By {t.createdBy.name}</span>
+                          <span>· {formatDate(t.createdAt)}</span>
+                          <UserInitialsAvatar
+                            name={t.createdBy.name}
+                            className="size-5 text-[9px]"
                           />
-                        </span>
+                        </>
+                      )}
+                      {!t.createdBy && (
+                        <span>{formatDate(t.createdAt)}</span>
                       )}
                     </div>
                     {t.description && t.description.trim() !== "" ? (
@@ -1006,9 +1180,9 @@ export default function ProjectDetailPage() {
                       </p>
                     </div>
                   ) : (
-                    <ul className="divide-y">
+                    <ul className="divide-y divide-border/40">
                       {state.comments.map((c) => (
-                        <li key={c._id} className="flex items-start gap-3 p-4">
+                        <li key={c._id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
                           <UserInitialsAvatar
                             name={c.author?.name ?? "?"}
                             className="size-8 text-[10px]"
@@ -1032,7 +1206,7 @@ export default function ProjectDetailPage() {
                     </ul>
                   )}
 
-                  <div className="border-t p-3">
+                  <div className="border-t border-border/40 px-4 py-3 sm:px-6">
                     {!state.composerOpen ? (
                       <button
                         type="button"
@@ -1094,40 +1268,24 @@ export default function ProjectDetailPage() {
             );
           })}
         </Tabs>
+        </div>
 
-        <aside className="rounded-lg border bg-card">
-          <div className="space-y-3 border-b p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <FolderKanban className="size-5" />
+        <aside className="border-border/40 lg:border-l">
+          <div className="divide-y divide-border/40 text-sm">
+            <SidebarRow label="Project">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                <span>
+                  <span className="text-muted-foreground">Name:</span>{" "}
+                  <span className="font-semibold">{project.name}</span>
+                </span>
+                <span className="text-muted-foreground">|</span>
+                <span>
+                  <span className="text-muted-foreground">ID:</span>{" "}
+                  <span className="font-mono text-xs">{project.projectId}</span>
+                </span>
               </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-md border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                    {project.projectId}
-                  </span>
-                  <StatusBadge status={project.status} />
-                </div>
-                <h1 className="text-lg font-bold tracking-tight leading-tight">
-                  {project.name}
-                </h1>
-              </div>
-            </div>
-            {canEdit && (
-              <Button
-                onClick={() =>
-                  router.push(`/dashboard/projects?edit=${project._id}`)
-                }
-                variant="outline"
-                size="sm"
-                className="w-full"
-              >
-                <Pencil className="mr-2 size-3.5" /> Edit project
-              </Button>
-            )}
-          </div>
+            </SidebarRow>
 
-          <div className="divide-y text-sm">
             <SidebarRow label="Reporting to">
               {project.reportingTo ? (
                 <MinimalPerson user={project.reportingTo} />
@@ -1149,7 +1307,7 @@ export default function ProjectDetailPage() {
               </div>
             </SidebarRow>
 
-            <div className="px-4 py-3">
+            <div className="px-5 py-3">
               <div className="mb-2 flex items-center gap-2">
                 <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Assignees
@@ -1557,7 +1715,7 @@ function SidebarRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="px-4 py-3">
+    <div className="px-5 py-3">
       <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </div>

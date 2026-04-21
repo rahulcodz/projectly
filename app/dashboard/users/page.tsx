@@ -430,65 +430,65 @@ export default function UsersPage() {
         </div>
       </div>
 
-      <div className="hidden overflow-hidden rounded-lg border md:block">
+      <div className="hidden overflow-hidden rounded-lg border border-border/40 md:block">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/60 hover:bg-muted/60">
-              <TableHead className="w-[45%] border-r">User</TableHead>
-              <TableHead className="border-r">Role</TableHead>
-              <TableHead className="border-r">Status</TableHead>
-              <TableHead className="w-[120px] text-right">Actions</TableHead>
+            <TableRow className="border-border/40 bg-muted/40 hover:bg-muted/40">
+              <TableHead className="h-10 w-[45%] px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">User</TableHead>
+              <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Role</TableHead>
+              <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</TableHead>
+              <TableHead className="h-10 w-[120px] px-3 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: Math.min(limit, 5) }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell className="border-r">
+                <TableRow key={i} className="border-border/40 hover:bg-transparent">
+                  <TableCell className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
-                      <Skeleton className="size-9 rounded-full" />
+                      <Skeleton className="size-8 rounded-full" />
                       <div className="space-y-1.5">
                         <Skeleton className="h-3.5 w-32" />
                         <Skeleton className="h-3 w-48" />
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-5 w-20 rounded-full" />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-5 w-16 rounded-full" />
                   </TableCell>
-                  <TableCell />
+                  <TableCell className="px-3 py-2.5" />
                 </TableRow>
               ))
             ) : users.length === 0 ? (
-              <TableRow>
+              <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={4} className="h-40">
                   <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
                 </TableCell>
               </TableRow>
             ) : (
               users.map((u) => (
-                <TableRow key={u._id}>
-                  <TableCell className="border-r">
+                <TableRow key={u._id} className="border-border/40 hover:bg-transparent">
+                  <TableCell className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
-                      <UserInitialsAvatar name={u.name} />
+                      <UserInitialsAvatar name={u.name} className="size-8 text-[11px]" />
                       <div className="min-w-0">
-                        <div className="font-medium truncate">{u.name}</div>
-                        <div className="text-sm text-muted-foreground truncate">
+                        <div className="text-sm font-medium truncate">{u.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
                           {u.email}
                         </div>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <RoleBadge role={u.role} />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <StatusBadge status={u.status} />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="px-3 py-2.5 text-right">
                     <RowActions
                       onEdit={() => openEdit(u)}
                       onChangePassword={() => openChangePassword(u)}

@@ -7,8 +7,6 @@ import {
   Users,
   FolderKanban,
   ListChecks,
-  Settings,
-  LifeBuoy,
 } from "lucide-react";
 
 import {
@@ -24,23 +22,20 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { type UserRole } from "@/lib/roles";
 
 type NavItem = {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
 };
 
 const mainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projects", url: "/dashboard/projects", icon: FolderKanban },
   { title: "Tasks", url: "/dashboard/tasks", icon: ListChecks },
-  { title: "Users", url: "/dashboard/users", icon: Users },
-];
-
-const secondaryNav: NavItem[] = [
-  { title: "Settings", url: "/dashboard/settings", icon: Settings },
-  { title: "Support", url: "/dashboard/support", icon: LifeBuoy },
+  { title: "Users", url: "/dashboard/users", icon: Users, adminOnly: true },
 ];
 
 const menuButtonClasses =
@@ -48,13 +43,16 @@ const menuButtonClasses =
   "group-data-[collapsible=icon]:mx-0 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:rounded-md group-data-[collapsible=icon]:px-2 " +
   "data-[active=true]:bg-primary/15 data-[active=true]:text-primary data-[active=true]:font-medium data-[active=true]:hover:bg-primary/20 data-[active=true]:hover:text-primary";
 
-export function AppSidebar() {
+export function AppSidebar({ role }: { role?: UserRole }) {
   const pathname = usePathname();
 
   const isActive = (url: string) => {
     if (url === "/dashboard") return pathname === "/dashboard";
     return pathname === url || pathname?.startsWith(url + "/");
   };
+
+  const canManage = role === "admin" || role === "project_manager";
+  const navItems = mainNav.filter((i) => !i.adminOnly || canManage);
 
   return (
     <Sidebar collapsible="icon">
@@ -82,30 +80,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNav.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url)}
-                    tooltip={item.title}
-                    className={cn(menuButtonClasses)}
-                  >
-                    <Link href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>System</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {secondaryNav.map((item) => (
+              {navItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton
                     asChild

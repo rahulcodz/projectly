@@ -372,62 +372,59 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      <div className="hidden overflow-hidden rounded-lg border md:block">
+      <div className="hidden overflow-hidden rounded-lg border border-border/40 md:block">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/60 hover:bg-muted/60">
-              <TableHead className="w-24 border-r">ID</TableHead>
-              <TableHead className="border-r">Name</TableHead>
-              <TableHead className="border-r">Status</TableHead>
-              <TableHead className="border-r">Reporting to</TableHead>
-              <TableHead className="border-r">Assignees</TableHead>
-              <TableHead className="border-r">Created by</TableHead>
+            <TableRow className="border-border/40 bg-muted/40 hover:bg-muted/40">
+              <TableHead className="h-10 w-24 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ID</TableHead>
+              <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Name</TableHead>
+              <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</TableHead>
+              <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reporting to</TableHead>
+              <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignees</TableHead>
+              <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created by</TableHead>
               {canEdit && (
-                <TableHead className="w-[100px] text-right">Actions</TableHead>
+                <TableHead className="h-10 w-[100px] px-3 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Actions</TableHead>
               )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: Math.min(limit, 5) }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell className="border-r">
+                <TableRow key={i} className="border-border/40 hover:bg-transparent">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-4 w-14" />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-4 w-40" />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-5 w-16 rounded-full" />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-4 w-28" />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-7 w-24 rounded-full" />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-4 w-28" />
                   </TableCell>
-                  {canEdit && <TableCell />}
+                  {canEdit && <TableCell className="px-3 py-2.5" />}
                 </TableRow>
               ))
             ) : projects.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={canEdit ? 7 : 6}
-                  className="h-40"
-                >
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={canEdit ? 7 : 6} className="h-40">
                   <EmptyState hasFilters={hasFilters} onClear={clearFilters} />
                 </TableCell>
               </TableRow>
             ) : (
               projects.map((p) => (
-                <TableRow key={p._id}>
-                  <TableCell className="border-r font-mono text-xs">
+                <TableRow key={p._id} className="border-border/40 hover:bg-transparent">
+                  <TableCell className="px-3 py-2.5 font-mono text-xs">
                     {p.projectId}
                   </TableCell>
-                  <TableCell className="border-r font-medium">
+                  <TableCell className="px-3 py-2.5 text-sm font-medium">
                     <Link
                       href={`/dashboard/projects/${p._id}`}
                       className="hover:text-primary hover:underline"
@@ -435,20 +432,20 @@ export default function ProjectsPage() {
                       {p.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <StatusBadge status={p.status} />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <PersonChip user={p.reportingTo} />
                   </TableCell>
-                  <TableCell className="border-r">
+                  <TableCell className="px-3 py-2.5">
                     <AssigneeStack assignees={p.assignees} />
                   </TableCell>
-                  <TableCell className="border-r text-sm text-muted-foreground">
+                  <TableCell className="px-3 py-2.5 text-sm text-muted-foreground">
                     {p.createdBy?.name ?? "—"}
                   </TableCell>
                   {canEdit && (
-                    <TableCell className="text-right">
+                    <TableCell className="px-3 py-2.5 text-right">
                       <RowActions
                         onEdit={() => openEdit(p)}
                         onDelete={() => setDeleteTarget(p)}
