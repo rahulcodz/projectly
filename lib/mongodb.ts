@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import "@/lib/register-models";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
