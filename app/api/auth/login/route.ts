@@ -4,6 +4,7 @@ import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { createSessionToken, setSessionCookie } from "@/lib/auth";
+import { validationResponse } from "@/lib/api-errors";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email"),
@@ -14,12 +15,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const parsed = loginSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid input" },
-        { status: 400 }
-      );
-    }
+    if (!parsed.success) return validationResponse(parsed.error);
 
     await connectDB();
 

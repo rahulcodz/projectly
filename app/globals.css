@@ -180,6 +180,86 @@
     letter-spacing: var(--tracking-normal);
   }
 
+  .rich-text {
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--foreground);
+    word-break: break-word;
+  }
+  .rich-text p {
+    margin: 0.35em 0;
+  }
+  .rich-text p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--muted-foreground);
+    float: left;
+    pointer-events: none;
+    height: 0;
+  }
+  .rich-text h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin: 0.8em 0 0.35em;
+  }
+  .rich-text h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0.7em 0 0.3em;
+  }
+  .rich-text h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0.6em 0 0.3em;
+  }
+  .rich-text ul,
+  .rich-text ol {
+    padding-left: 1.25rem;
+    margin: 0.35em 0;
+  }
+  .rich-text ul {
+    list-style: disc;
+  }
+  .rich-text ol {
+    list-style: decimal;
+  }
+  .rich-text blockquote {
+    border-left: 3px solid var(--border);
+    padding-left: 0.75rem;
+    margin: 0.5em 0;
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+  .rich-text code {
+    background: var(--muted);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+  }
+  .rich-text pre {
+    background: var(--muted);
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    margin: 0.5em 0;
+  }
+  .rich-text pre code {
+    background: transparent;
+    padding: 0;
+  }
+  .rich-text a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .rich-text hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 0.75em 0;
+  }
+
   /* Kill Chrome/Safari autofill's tint — keep theme bg + text color */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,

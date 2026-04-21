@@ -3,6 +3,7 @@ import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { USER_ROLES } from "@/lib/roles";
+import { fieldError, validationResponse } from "@/lib/api-errors";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -68,20 +69,16 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const parsed = createUserSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid input" },
-        { status: 400 }
-      );
-    }
+    if (!parsed.success) return validationResponse(parsed.error);
 
     await connectDB();
 
     const existing = await User.findOne({ email: parsed.data.email });
     if (existing) {
-      return NextResponse.json(
-        { error: "A user with this email already exists" },
-        { status: 409 }
+      return fieldError(
+        "email",
+        "A user with this email already exists",
+        409
       );
     }
 

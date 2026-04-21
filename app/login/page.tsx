@@ -26,6 +26,8 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { FieldError, FormAlert, RequiredMark } from "@/components/form-error";
+import { type FieldErrors, parseApiError } from "@/lib/form-errors";
 
 function LoginForm() {
   const router = useRouter();
@@ -36,9 +38,23 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setAlertMsg(null);
+
+    const localErrs: FieldErrors = {};
+    const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRx.test(email.trim())) localErrs.email = "Enter a valid email";
+    if (password.length < 1) localErrs.password = "Password is required";
+    if (Object.keys(localErrs).length > 0) {
+      setErrors(localErrs);
+      return;
+    }
+    setErrors({});
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -46,13 +62,17 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Login failed");
+      if (!res.ok) {
+        const { message, fieldErrors } = await parseApiError(res);
+        if (Object.keys(fieldErrors).length > 0) setErrors(fieldErrors);
+        else setAlertMsg(message);
+        return;
+      }
       toast.success("Welcome back");
       router.push(redirect);
       router.refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Login failed");
+      setAlertMsg(err instanceof Error ? err.message : "Login failed");
     } finally {
       setSubmitting(false);
     }
@@ -82,11 +102,17 @@ function LoginForm() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid gap-2">
+            <FormAlert message={alertMsg} />
+
+            <div className="grid gap-1.5">
               <Label htmlFor="email" className="text-sm font-medium">
                 Email address
+                <RequiredMark />
               </Label>
-              <InputGroup className="h-11">
+              <InputGroup
+                className="h-11"
+                aria-invalid={errors.email ? true : undefined}
+              >
                 <InputGroupAddon>
                   <Mail className="text-muted-foreground" />
                 </InputGroupAddon>
@@ -95,18 +121,22 @@ function LoginForm() {
                   type="email"
                   placeholder="you@company.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errors.email) setErrors((p) => ({ ...p, email: "" }));
+                  }}
                   autoComplete="email"
                   className="h-11"
                 />
               </InputGroup>
+              <FieldError message={errors.email} />
             </div>
 
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-sm font-medium">
                   Password
+                  <RequiredMark />
                 </Label>
                 <button
                   type="button"
@@ -118,7 +148,10 @@ function LoginForm() {
                   Forgot password?
                 </button>
               </div>
-              <InputGroup className="h-11">
+              <InputGroup
+                className="h-11"
+                aria-invalid={errors.password ? true : undefined}
+              >
                 <InputGroupAddon>
                   <Lock className="text-muted-foreground" />
                 </InputGroupAddon>
@@ -127,8 +160,11 @@ function LoginForm() {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password)
+                      setErrors((p) => ({ ...p, password: "" }));
+                  }}
                   autoComplete="current-password"
                   className="h-11"
                 />
@@ -142,6 +178,7 @@ function LoginForm() {
                   </InputGroupButton>
                 </InputGroupAddon>
               </InputGroup>
+              <FieldError message={errors.password} />
             </div>
 
             <Button

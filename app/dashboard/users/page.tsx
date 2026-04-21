@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  KeyRound,
   Pencil,
   Plus,
   Search,
@@ -69,7 +70,9 @@ import {
   StatusBadge,
   UserInitialsAvatar,
 } from "@/components/role-status-badge";
+import { FieldError, FormAlert, RequiredMark } from "@/components/form-error";
 import { ROLE_LABELS, USER_ROLES, type UserRole } from "@/lib/roles";
+import { type FieldErrors, parseApiError } from "@/lib/form-errors";
 
 type User = {
   _id: string;
@@ -123,6 +126,18 @@ export default function UsersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const [formErrors, setFormErrors] = useState<FieldErrors>({});
+  const [formAlert, setFormAlert] = useState<string | null>(null);
+
+  const [passwordUser, setPasswordUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [pwErrors, setPwErrors] = useState<FieldErrors>({});
+  const [pwAlert, setPwAlert] = useState<string | null>(null);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -172,10 +187,16 @@ export default function UsersPage() {
   const hasFilters =
     Boolean(debouncedQuery) || roleFilter !== "all" || statusFilter !== "all";
 
+  function resetFormErrors() {
+    setFormErrors({});
+    setFormAlert(null);
+  }
+
   function openCreate() {
     setEditingId(null);
     setForm(emptyForm);
     setShowPassword(false);
+    resetFormErrors();
     setDialogOpen(true);
   }
 
@@ -189,11 +210,31 @@ export default function UsersPage() {
       status: user.status,
     });
     setShowPassword(false);
+    resetFormErrors();
     setDialogOpen(true);
+  }
+
+  function validateUserForm(): FieldErrors {
+    const errs: FieldErrors = {};
+    if (form.name.trim().length < 2) errs.name = "Name must be at least 2 characters";
+    const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRx.test(form.email.trim())) errs.email = "Enter a valid email";
+    if (!editingId && form.password.length < 6) {
+      errs.password = "Password must be at least 6 characters";
+    }
+    return errs;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    resetFormErrors();
+
+    const localErrs = validateUserForm();
+    if (Object.keys(localErrs).length > 0) {
+      setFormErrors(localErrs);
+      return;
+    }
+
     setSubmitting(true);
     try {
       const isEdit = Boolean(editingId);
@@ -208,14 +249,23 @@ export default function UsersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Request failed");
+
+      if (!res.ok) {
+        const { message, fieldErrors } = await parseApiError(res);
+        if (Object.keys(fieldErrors).length > 0) {
+          setFormErrors(fieldErrors);
+          setFormAlert(null);
+        } else {
+          setFormAlert(message);
+        }
+        return;
+      }
 
       toast.success(isEdit ? "User updated" : "User created");
       setDialogOpen(false);
       await loadUsers();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Request failed");
+      setFormAlert(err instanceof Error ? err.message : "Request failed");
     } finally {
       setSubmitting(false);
     }
@@ -240,6 +290,59 @@ export default function UsersPage() {
     setQuery("");
     setRoleFilter("all");
     setStatusFilter("all");
+  }
+
+  function openChangePassword(user: User) {
+    setPasswordUser(user);
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+    setPwErrors({});
+    setPwAlert(null);
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!passwordUser) return;
+
+    const errs: FieldErrors = {};
+    if (newPassword.length < 6) {
+      errs.password = "Password must be at least 6 characters";
+    }
+    if (newPassword !== confirmPassword) {
+      errs.confirm = "Passwords do not match";
+    }
+    setPwErrors(errs);
+    setPwAlert(null);
+    if (Object.keys(errs).length > 0) return;
+
+    setChangingPassword(true);
+    try {
+      const res = await fetch(`/api/users/${passwordUser._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+
+      if (!res.ok) {
+        const { message, fieldErrors } = await parseApiError(res);
+        const mapped: FieldErrors = {};
+        if (fieldErrors.password) mapped.password = fieldErrors.password;
+        if (Object.keys(mapped).length > 0) setPwErrors(mapped);
+        else setPwAlert(message);
+        return;
+      }
+
+      toast.success(`Password updated for ${passwordUser.name}`);
+      setPasswordUser(null);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setPwAlert(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setChangingPassword(false);
+    }
   }
 
   return (
@@ -388,6 +491,7 @@ export default function UsersPage() {
                   <TableCell className="text-right">
                     <RowActions
                       onEdit={() => openEdit(u)}
+                      onChangePassword={() => openChangePassword(u)}
                       onDelete={() => setDeleteId(u._id)}
                     />
                   </TableCell>
@@ -430,6 +534,7 @@ export default function UsersPage() {
                     </div>
                     <RowActions
                       onEdit={() => openEdit(u)}
+                      onChangePassword={() => openChangePassword(u)}
                       onDelete={() => setDeleteId(u._id)}
                     />
                   </div>
@@ -458,7 +563,9 @@ export default function UsersPage() {
               value={String(limit)}
               onValueChange={(v) => setLimit(Number(v))}
             >
-              <SelectTrigger className={`h-8 w-20 ${controlClasses}`}>
+              <SelectTrigger
+                className={`h-7 w-16 px-2 py-0 text-xs [&_svg]:size-3 ${controlClasses}`}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -476,11 +583,11 @@ export default function UsersPage() {
           <Button
             variant="outline"
             size="sm"
-            className={`h-8 ${controlClasses}`}
+            className={`h-7 px-2 text-xs ${controlClasses}`}
             disabled={loading || page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            <ChevronLeft className="size-4" /> Previous
+            <ChevronLeft className="size-3.5" /> Previous
           </Button>
           <div className="text-xs text-muted-foreground">
             Page <span className="font-medium text-foreground">{page}</span> of{" "}
@@ -489,11 +596,11 @@ export default function UsersPage() {
           <Button
             variant="outline"
             size="sm"
-            className={`h-8 ${controlClasses}`}
+            className={`h-7 px-2 text-xs ${controlClasses}`}
             disabled={loading || page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
           >
-            Next <ChevronRight className="size-4" />
+            Next <ChevronRight className="size-3.5" />
           </Button>
         </div>
       </div>
@@ -507,72 +614,90 @@ export default function UsersPage() {
               </DialogTitle>
               <DialogDescription>
                 {editingId
-                  ? "Update user details. Leave password blank to keep the current one."
+                  ? "Update name, email, role, and status. Use the key icon on a row to change the password."
                   : "Create a new team member and assign a role."}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-2">
-              <Label htmlFor="name">Full name</Label>
+            <FormAlert message={formAlert} />
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="name">
+                Full name
+                <RequiredMark />
+              </Label>
               <Input
                 id="name"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, name: e.target.value });
+                  if (formErrors.name)
+                    setFormErrors((p) => ({ ...p, name: "" }));
+                }}
                 placeholder="Jane Doe"
-                required
+                aria-invalid={formErrors.name ? true : undefined}
+                aria-describedby={formErrors.name ? "name-err" : undefined}
                 className={controlClasses}
               />
+              <FieldError reserve id="name-err" message={formErrors.name} />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">
+                Email
+                <RequiredMark />
+              </Label>
               <Input
                 id="email"
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, email: e.target.value });
+                  if (formErrors.email)
+                    setFormErrors((p) => ({ ...p, email: "" }));
+                }}
                 placeholder="jane@company.com"
-                required
+                aria-invalid={formErrors.email ? true : undefined}
+                aria-describedby={formErrors.email ? "email-err" : undefined}
                 className={controlClasses}
               />
+              <FieldError reserve id="email-err" message={formErrors.email} />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="password">
-                Password{" "}
-                {editingId && (
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                )}
-              </Label>
-              <InputGroup className={controlClasses}>
-                <InputGroupInput
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={form.password}
-                  onChange={(e) =>
-                    setForm({ ...form, password: e.target.value })
-                  }
-                  placeholder={
-                    editingId
-                      ? "Leave blank to keep current"
-                      : "Minimum 6 characters"
-                  }
-                  required={!editingId}
-                  minLength={editingId ? 0 : 6}
-                />
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    size="icon-sm"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    onClick={() => setShowPassword((v) => !v)}
-                  >
-                    {showPassword ? <EyeOff /> : <Eye />}
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
-            </div>
+            {!editingId && (
+              <div className="grid gap-1.5">
+                <Label htmlFor="password">
+                  Password
+                  <RequiredMark />
+                </Label>
+                <InputGroup
+                  className={controlClasses}
+                  aria-invalid={formErrors.password ? true : undefined}
+                >
+                  <InputGroupInput
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => {
+                      setForm({ ...form, password: e.target.value });
+                      if (formErrors.password)
+                        setFormErrors((p) => ({ ...p, password: "" }));
+                    }}
+                    placeholder="Minimum 6 characters"
+                  />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      size="icon-sm"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword((v) => !v)}
+                    >
+                      {showPassword ? <EyeOff /> : <Eye />}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                </InputGroup>
+                <FieldError reserve message={formErrors.password} />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -581,7 +706,7 @@ export default function UsersPage() {
                   value={form.role}
                   onValueChange={(v) => setForm({ ...form, role: v as UserRole })}
                 >
-                  <SelectTrigger className={controlClasses}>
+                  <SelectTrigger className={`w-full ${controlClasses}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -602,7 +727,7 @@ export default function UsersPage() {
                     setForm({ ...form, status: v as "active" | "inactive" })
                   }
                 >
-                  <SelectTrigger className={controlClasses}>
+                  <SelectTrigger className={`w-full ${controlClasses}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -624,6 +749,122 @@ export default function UsersPage() {
               </Button>
               <Button type="submit" disabled={submitting}>
                 {submitting ? "Saving…" : editingId ? "Save changes" : "Create user"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(passwordUser)}
+        onOpenChange={(open) => !open && setPasswordUser(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Change password</DialogTitle>
+              <DialogDescription>
+                {passwordUser
+                  ? `Set a new password for ${passwordUser.name} (${passwordUser.email}).`
+                  : ""}
+              </DialogDescription>
+            </DialogHeader>
+
+            <FormAlert message={pwAlert} />
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="new-password">
+                New password
+                <RequiredMark />
+              </Label>
+              <InputGroup
+                className={controlClasses}
+                aria-invalid={pwErrors.password ? true : undefined}
+              >
+                <InputGroupInput
+                  id="new-password"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (pwErrors.password)
+                      setPwErrors((p) => ({ ...p, password: "" }));
+                  }}
+                  placeholder="Minimum 6 characters"
+                  autoFocus
+                />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    size="icon-sm"
+                    aria-label={showNewPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowNewPassword((v) => !v)}
+                  >
+                    {showNewPassword ? <EyeOff /> : <Eye />}
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
+              <FieldError reserve message={pwErrors.password} />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="confirm-password">
+                Confirm password
+                <RequiredMark />
+              </Label>
+              <InputGroup
+                className={controlClasses}
+                aria-invalid={pwErrors.confirm ? true : undefined}
+              >
+                <InputGroupInput
+                  id="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (pwErrors.confirm)
+                      setPwErrors((p) => ({ ...p, confirm: "" }));
+                  }}
+                  placeholder="Re-enter the new password"
+                />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    size="icon-sm"
+                    aria-label={
+                      showConfirmPassword ? "Hide password" : "Show password"
+                    }
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                  >
+                    {showConfirmPassword ? <EyeOff /> : <Eye />}
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
+              {pwErrors.confirm ? (
+                <FieldError message={pwErrors.confirm} />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  User will need to sign in again with this new password.
+                </p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPasswordUser(null)}
+                disabled={changingPassword}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  changingPassword ||
+                  newPassword.length < 6 ||
+                  newPassword !== confirmPassword
+                }
+              >
+                {changingPassword ? "Updating…" : "Update password"}
               </Button>
             </DialogFooter>
           </form>
@@ -659,9 +900,11 @@ export default function UsersPage() {
 
 function RowActions({
   onEdit,
+  onChangePassword,
   onDelete,
 }: {
   onEdit: () => void;
+  onChangePassword: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -680,6 +923,20 @@ function RowActions({
             </Button>
           </TooltipTrigger>
           <TooltipContent>Edit</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              onClick={onChangePassword}
+              aria-label="Change password"
+            >
+              <KeyRound className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Change password</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>

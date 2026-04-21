@@ -4,11 +4,12 @@ import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { USER_ROLES } from "@/lib/roles";
+import { fieldError, validationResponse } from "@/lib/api-errors";
 
 const updateUserSchema = z.object({
-  name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
-  password: z.string().min(6).optional(),
+  name: z.string().min(2, "Name must be at least 2 characters").optional(),
+  email: z.string().email("Invalid email").optional(),
+  password: z.string().min(6, "Password must be at least 6 characters").optional(),
   role: z.enum(USER_ROLES).optional(),
   status: z.enum(["active", "inactive"]).optional(),
 });
@@ -47,17 +48,19 @@ export async function PATCH(
   try {
     const body = await req.json();
     const parsed = updateUserSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Invalid input" },
-        { status: 400 }
-      );
-    }
+    if (!parsed.success) return validationResponse(parsed.error);
 
     await connectDB();
 
     const user = await User.findById(id).select("+password");
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    if (parsed.data.email && parsed.data.email !== user.email) {
+      const clash = await User.findOne({ email: parsed.data.email, _id: { $ne: id } });
+      if (clash) {
+        return fieldError("email", "A user with this email already exists", 409);
+      }
+    }
 
     Object.assign(user, parsed.data);
     await user.save();

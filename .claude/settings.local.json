@@ -3,7 +3,12 @@
     "allow": [
       "Bash(pnpm add *)",
       "Bash(npx tsc *)",
-      "Bash(pnpm seed *)"
+      "Bash(pnpm seed *)",
+      "Bash(grep -n \"AlertDialog open={Boolean\\(deleteId\\)}\\\\|</div>$\" \"D:/workSpace/projectly/app/dashboard/users/page.tsx\")",
+      "Bash(grep -n \"^function\\\\|^}$\" \"D:/workSpace/projectly/app/dashboard/projects/[id]/page.tsx\")",
+      "Bash(grep -n \"<Dialog open={taskDialogOpen}\\\\|      </div>$\" \"D:/workSpace/projectly/app/dashboard/projects/[id]/page.tsx\")",
+      "Bash(grep -n \"</Link>$\\\\|KanbanCard\" \"D:/workSpace/projectly/app/dashboard/projects/[id]/page.tsx\")",
+      "Bash(grep -n \"tasks.map\\(\\(t\\) =>\\\\|<TableRow$\\\\|cursor-pointer hover:bg-accent\" \"D:/workSpace/projectly/app/dashboard/projects/[id]/page.tsx\")"
     ]
   }
 }
