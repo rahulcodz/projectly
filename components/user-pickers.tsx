@@ -136,6 +136,7 @@ function UserSearchList({
             >
               <UserInitialsAvatar
                 name={u.name}
+                role={u.role}
                 className="size-6 text-[10px]"
               />
               <div className="min-w-0 flex-1 text-left">
@@ -185,6 +186,7 @@ export function UserSinglePicker({
             <span className="flex min-w-0 items-center gap-2">
               <UserInitialsAvatar
                 name={selected.name}
+                role={selected.role}
                 className="size-5 text-[9px]"
               />
               <span className="truncate">{selected.name}</span>
@@ -271,6 +273,7 @@ export function UserMultiPicker({
               >
                 <UserInitialsAvatar
                   name={u.name}
+                  role={u.role}
                   className="size-4 text-[9px]"
                 />
                 {u.name}

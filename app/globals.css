@@ -180,6 +180,13 @@
     letter-spacing: var(--tracking-normal);
   }
 
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  label[for],
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
   .rich-text {
     font-size: 0.875rem;
     line-height: 1.55;

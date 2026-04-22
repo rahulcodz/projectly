@@ -323,6 +323,7 @@ export default function DashboardHome() {
                     >
                       <UserInitialsAvatar
                         name={u.name}
+                        role={u.role}
                         className="size-8 text-[11px]"
                       />
                       <div className="min-w-0 flex-1">

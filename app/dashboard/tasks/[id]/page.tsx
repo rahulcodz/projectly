@@ -371,6 +371,7 @@ export default function TaskDetailPage() {
                     <li key={c._id} className="flex items-start gap-3 p-4">
                       <UserInitialsAvatar
                         name={c.author?.name ?? "?"}
+                        role={c.author?.role}
                         className="size-8 text-[10px]"
                       />
                       <div className="min-w-0 flex-1">
@@ -511,7 +512,7 @@ function PeopleList({
     <ul className="space-y-2">
       {users.map((u) => (
         <li key={u._id} className="flex items-center gap-2">
-          <UserInitialsAvatar name={u.name} className="size-7 text-[10px]" />
+          <UserInitialsAvatar name={u.name} role={u.role} className="size-7 text-[10px]" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium">{u.name}</div>
             <div className="truncate text-xs text-muted-foreground">

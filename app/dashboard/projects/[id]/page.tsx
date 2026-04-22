@@ -804,6 +804,7 @@ export default function ProjectDetailPage() {
                     <li key={c._id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
                       <UserInitialsAvatar
                         name={c.author?.name ?? "?"}
+                        role={c.author?.role}
                         className="size-8 text-[10px]"
                       />
                       <div className="min-w-0 flex-1">
@@ -1245,6 +1246,7 @@ export default function ProjectDetailPage() {
                           <span>· {formatDate(t.createdAt)}</span>
                           <UserInitialsAvatar
                             name={t.createdBy.name}
+                            role={t.createdBy.role}
                             className="size-5 text-[9px]"
                           />
                         </>
@@ -1293,6 +1295,7 @@ export default function ProjectDetailPage() {
                         <li key={c._id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
                           <UserInitialsAvatar
                             name={c.author?.name ?? "?"}
+                            role={c.author?.role}
                             className="size-8 text-[10px]"
                           />
                           <div className="min-w-0 flex-1">
@@ -1724,7 +1727,7 @@ function MinimalPerson({ user }: { user: UserLite }) {
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="flex cursor-help items-center gap-2">
-            <UserInitialsAvatar name={user.name} className="size-6 text-[10px]" />
+            <UserInitialsAvatar name={user.name} role={user.role} className="size-6 text-[10px]" />
             <span className="truncate text-sm">{user.name}</span>
           </div>
         </TooltipTrigger>
@@ -1746,23 +1749,16 @@ function MinimalPerson({ user }: { user: UserLite }) {
   );
 }
 
-const AVATAR_PALETTE = [
-  "bg-sky-600 text-white dark:bg-sky-500",
-  "bg-emerald-600 text-white dark:bg-emerald-500",
-  "bg-violet-600 text-white dark:bg-violet-500",
-  "bg-amber-600 text-white dark:bg-amber-500",
-  "bg-rose-600 text-white dark:bg-rose-500",
-  "bg-cyan-600 text-white dark:bg-cyan-500",
-  "bg-fuchsia-600 text-white dark:bg-fuchsia-500",
-  "bg-teal-600 text-white dark:bg-teal-500",
-  "bg-orange-600 text-white dark:bg-orange-500",
-  "bg-indigo-600 text-white dark:bg-indigo-500",
-];
-
-function colorForId(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+function colorForRole(role?: UserRole) {
+  switch (role) {
+    case "admin":
+      return "bg-red-600 text-white";
+    case "project_manager":
+      return "bg-amber-500 text-white";
+    case "user":
+    default:
+      return "bg-green-600 text-white";
+  }
 }
 
 function initialsOf(name: string) {
@@ -1837,7 +1833,7 @@ function AssigneeAvatarRow({
                   <div
                     className={cn(
                       "flex size-8 items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold",
-                      colorForId(u._id)
+                      colorForRole(u.role)
                     )}
                   >
                     {initialsOf(u.name)}
@@ -1932,7 +1928,7 @@ function AssigneeAvatarRow({
                     <span
                       className={cn(
                         "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ring-1 ring-inset",
-                        colorForId(u._id)
+                        colorForRole(u.role)
                       )}
                     >
                       {initialsOf(u.name)}
@@ -2022,7 +2018,7 @@ function InfoCard({
 function PersonLine({ user }: { user: UserLite }) {
   return (
     <div className="flex items-center gap-3">
-      <UserInitialsAvatar name={user.name} className="size-9" />
+      <UserInitialsAvatar name={user.name} role={user.role} className="size-9" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{user.name}</div>
         <div className="truncate text-xs text-muted-foreground">{user.email}</div>
@@ -2203,7 +2199,7 @@ function TaskAssigneeRow({
                   <div
                     className={cn(
                       "flex size-7 items-center justify-center rounded-full border-2 border-background text-[9px] font-semibold",
-                      colorForId(u._id)
+                      colorForRole(u.role)
                     )}
                   >
                     {initialsOf(u.name)}
@@ -2290,7 +2286,7 @@ function TaskAssigneeRow({
                   <span
                     className={cn(
                       "flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold",
-                      colorForId(u._id)
+                      colorForRole(u.role)
                     )}
                   >
                     {initialsOf(u.name)}
@@ -2389,7 +2385,7 @@ function ProjectUserPicker({
                 key={u._id}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full pl-0.5 pr-1.5 py-0.5 text-xs font-medium text-white",
-                  colorForId(u._id)
+                  colorForRole(u.role)
                 )}
               >
                 <span className="flex size-4 items-center justify-center rounded-full bg-white/25 text-[9px]">
@@ -2453,7 +2449,7 @@ function ProjectUserPicker({
                   <span
                     className={cn(
                       "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold border-2 border-background",
-                      colorForId(u._id)
+                      colorForRole(u.role)
                     )}
                   >
                     {initialsOf(u.name)}
@@ -2505,7 +2501,7 @@ function AssigneeBadges({
                 className={cn(
                   "relative z-0 flex items-center justify-center rounded-full border-2 border-background font-semibold transition-transform hover:z-20 hover:scale-110",
                   sizeCls,
-                  colorForId(u._id)
+                  colorForRole(u.role)
                 )}
               >
                 {initialsOf(u.name)}

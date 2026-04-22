@@ -55,20 +55,6 @@ function escapeHtml(s: string): string {
 
 type HeaderTone = "primary" | "success" | "danger" | "info";
 
-function toneGradient(tone: HeaderTone): string {
-  switch (tone) {
-    case "success":
-      return "linear-gradient(135deg,#10b981 0%,#059669 100%)";
-    case "danger":
-      return "linear-gradient(135deg,#f87171 0%,#dc2626 100%)";
-    case "info":
-      return "linear-gradient(135deg,#6366f1 0%,#4f46e5 100%)";
-    case "primary":
-    default:
-      return "linear-gradient(135deg,#f97316 0%,#ea580c 100%)";
-  }
-}
-
 function toneButtonBg(tone: HeaderTone): string {
   switch (tone) {
     case "success":
@@ -95,7 +81,6 @@ function layout(opts: {
   title: string;
 }): string {
   const tone = opts.tone ?? "primary";
-  const gradient = toneGradient(tone);
   const btnBg = toneButtonBg(tone);
 
   const cta =
@@ -132,17 +117,17 @@ function layout(opts: {
         <td align="center">
           <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06),0 8px 24px rgba(15,23,42,0.08);">
             <tr>
-              <td style="padding:28px 32px;background:${gradient};color:#ffffff;">
-                <div style="display:inline-flex;align-items:center;gap:10px;">
-                  <span style="display:inline-block;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.18);text-align:center;line-height:32px;font-weight:700;font-size:15px;">P</span>
-                  <span style="font-weight:700;font-size:18px;letter-spacing:-0.01em;">Projectly</span>
+              <td style="padding:32px 32px 8px;background:#ffffff;color:#0f172a;">
+                <div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:20px;">
+                  <span style="display:inline-block;width:32px;height:32px;border-radius:8px;background:${btnBg};color:#ffffff;text-align:center;line-height:32px;font-weight:700;font-size:15px;">P</span>
+                  <span style="font-weight:700;font-size:18px;letter-spacing:-0.01em;color:#0f172a;">Projectly</span>
                 </div>
-                <h1 style="margin:20px 0 6px;font-size:22px;line-height:30px;letter-spacing:-0.015em;">${escapeHtml(
+                <h1 style="margin:0 0 6px;font-size:22px;line-height:30px;letter-spacing:-0.015em;color:#0f172a;">${escapeHtml(
                   opts.heading
                 )}</h1>
                 ${
                   opts.subHeading
-                    ? `<p style="margin:0;font-size:13px;line-height:20px;color:rgba(255,255,255,0.9);">${escapeHtml(
+                    ? `<p style="margin:0;font-size:13px;line-height:20px;color:#64748b;">${escapeHtml(
                         opts.subHeading
                       )}</p>`
                     : ""
@@ -150,7 +135,7 @@ function layout(opts: {
               </td>
             </tr>
             <tr>
-              <td style="padding:28px 32px 8px;">
+              <td style="padding:20px 32px 8px;">
                 ${opts.bodyHtml}
                 ${cta}
               </td>

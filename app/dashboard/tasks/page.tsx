@@ -500,6 +500,7 @@ function AssigneeStack({ assignees }: { assignees: UserLite[] }) {
         <UserInitialsAvatar
           key={u._id}
           name={u.name}
+          role={u.role}
           className="size-7 text-[10px] ring-2 ring-background"
         />
       ))}

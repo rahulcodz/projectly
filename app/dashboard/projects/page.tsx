@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Trash2,
+  UserPlus,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -439,7 +440,7 @@ export default function ProjectsPage() {
                     <PersonChip user={p.reportingTo} />
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
-                    <AssigneeStack assignees={p.assignees} />
+                    <AssigneeStack assignees={p.assignees} projectId={p._id} />
                   </TableCell>
                   <TableCell className="px-3 py-2.5 text-sm text-muted-foreground">
                     {p.createdBy?.name ?? "—"}
@@ -504,7 +505,7 @@ export default function ProjectsPage() {
                   )}
                   <span>Created by: {p.createdBy?.name ?? "—"}</span>
                 </div>
-                <AssigneeStack assignees={p.assignees} />
+                <AssigneeStack assignees={p.assignees} projectId={p._id} />
               </li>
             ))}
           </ul>
@@ -735,27 +736,33 @@ function PersonChip({ user }: { user: UserLite | null }) {
   if (!user) return <span className="text-sm text-muted-foreground">—</span>;
   return (
     <div className="flex items-center gap-2">
-      <UserInitialsAvatar name={user.name} className="size-6 text-[10px]" />
+      <UserInitialsAvatar name={user.name} role={user.role} className="size-6 text-[10px]" />
       <span className="text-sm">{user.name}</span>
     </div>
   );
 }
 
-function AssigneeStack({ assignees }: { assignees: UserLite[] }) {
-  if (!assignees || assignees.length === 0) {
-    return <span className="text-sm text-muted-foreground">—</span>;
-  }
-  const shown = assignees.slice(0, 4);
-  const extra = assignees.length - shown.length;
+function AssigneeStack({
+  assignees,
+  projectId,
+}: {
+  assignees: UserLite[];
+  projectId: string;
+}) {
+  const list = assignees ?? [];
+  const shown = list.slice(0, 4);
+  const extra = list.length - shown.length;
+  const overflow = list.slice(shown.length);
   return (
     <TooltipProvider delayDuration={150}>
       <div className="flex items-center -space-x-2">
         {shown.map((a) => (
           <Tooltip key={a._id}>
             <TooltipTrigger asChild>
-              <div className="ring-2 ring-background rounded-full">
+              <div className="relative z-0 rounded-full ring-2 ring-background transition-transform hover:z-10 hover:scale-110">
                 <UserInitialsAvatar
                   name={a.name}
+                  role={a.role}
                   className="size-7 text-[10px]"
                 />
               </div>
@@ -763,11 +770,48 @@ function AssigneeStack({ assignees }: { assignees: UserLite[] }) {
             <TooltipContent>{a.name}</TooltipContent>
           </Tooltip>
         ))}
-        {extra > 0 && (
-          <span className="ring-2 ring-background flex size-7 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
-            +{extra}
-          </span>
-        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              href={`/dashboard/projects/${projectId}`}
+              aria-label={
+                extra > 0 ? `${extra} more assignees` : "Manage assignees"
+              }
+              className={cn(
+                "relative z-0 flex size-7 items-center justify-center rounded-full border-2 border-muted-foreground/30 bg-background text-muted-foreground transition-all hover:z-10 hover:scale-110 hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
+              )}
+            >
+              {extra > 0 ? (
+                <span className="text-[10px] font-semibold">+{extra}</span>
+              ) : (
+                <UserPlus className="size-3" />
+              )}
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            {extra > 0 ? (
+              <div className="text-xs">
+                <div className="mb-0.5 font-medium">
+                  {extra} more assignee{extra === 1 ? "" : "s"}
+                </div>
+                {overflow.slice(0, 8).map((u) => (
+                  <div key={u._id} className="text-muted-foreground">
+                    {u.name}
+                  </div>
+                ))}
+                {overflow.length > 8 && (
+                  <div className="text-muted-foreground">
+                    …and {overflow.length - 8} more
+                  </div>
+                )}
+              </div>
+            ) : list.length === 0 ? (
+              "Assign people"
+            ) : (
+              "Manage assignees"
+            )}
+          </TooltipContent>
+        </Tooltip>
       </div>
     </TooltipProvider>
   );
@@ -883,6 +927,7 @@ function UserSearchList({
             >
               <UserInitialsAvatar
                 name={u.name}
+                role={u.role}
                 className="size-6 text-[10px]"
               />
               <div className="min-w-0 flex-1 text-left">
@@ -930,6 +975,7 @@ function ReportingPicker({
             <span className="flex min-w-0 items-center gap-2">
               <UserInitialsAvatar
                 name={selected.name}
+                role={selected.role}
                 className="size-5 text-[9px]"
               />
               <span className="truncate">{selected.name}</span>
@@ -1014,6 +1060,7 @@ function AssigneesPicker({
               >
                 <UserInitialsAvatar
                   name={u.name}
+                  role={u.role}
                   className="size-4 text-[9px]"
                 />
                 {u.name}

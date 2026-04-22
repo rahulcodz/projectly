@@ -1,18 +1,32 @@
 import Link from "next/link";
-import { ArrowRight, FolderKanban, ListChecks, Users } from "lucide-react";
+import { ArrowRight, FolderKanban, ListChecks, LogIn, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getSession } from "@/lib/auth";
 
-export default function Page() {
+export default async function Page() {
+  const session = await getSession();
+  const isStaff =
+    session?.role === "admin" || session?.role === "project_manager";
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="relative overflow-hidden border-b border-border">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10" />
         <div className="relative max-w-5xl mx-auto px-6 py-24">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
-              P
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
+                P
+              </div>
+              <span className="text-lg font-semibold tracking-tight">Projectly</span>
             </div>
-            <span className="text-lg font-semibold tracking-tight">Projectly</span>
+            {!session && (
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/login">
+                  <LogIn className="mr-1.5 size-4" /> Sign in
+                </Link>
+              </Button>
+            )}
           </div>
           <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-balance mb-4">
             Project management for modern teams.
@@ -22,14 +36,31 @@ export default function Page() {
             access for admins, project managers, and users.
           </p>
           <div className="flex gap-3">
-            <Button asChild size="lg">
-              <Link href="/dashboard">
-                Open dashboard <ArrowRight className="ml-2 size-4" />
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/dashboard/users">Manage users</Link>
-            </Button>
+            {session ? (
+              <>
+                <Button asChild size="lg">
+                  <Link href="/dashboard">
+                    Open dashboard <ArrowRight className="ml-2 size-4" />
+                  </Link>
+                </Button>
+                {isStaff && (
+                  <Button asChild size="lg" variant="outline">
+                    <Link href="/dashboard/users">Manage users</Link>
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Button asChild size="lg">
+                  <Link href="/login?redirect=%2Fdashboard">
+                    Sign in <ArrowRight className="ml-2 size-4" />
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <Link href="/login">Continue to login</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>

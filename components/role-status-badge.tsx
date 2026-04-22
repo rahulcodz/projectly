@@ -4,11 +4,11 @@ import { ROLE_LABELS, type UserRole } from "@/lib/roles";
 export function RoleBadge({ role, className }: { role: UserRole; className?: string }) {
   const styles: Record<UserRole, string> = {
     admin:
-      "bg-primary/10 text-primary ring-primary/20 dark:bg-primary/15 dark:text-primary-foreground/90 dark:ring-primary/30",
+      "bg-red-900/20 text-red-950 ring-red-900/45 dark:bg-red-800/25 dark:text-red-200 dark:ring-red-800/50",
     project_manager:
-      "bg-chart-1/15 text-chart-1 ring-chart-1/25 dark:bg-chart-1/20 dark:text-chart-1 dark:ring-chart-1/30",
+      "bg-yellow-900/20 text-yellow-950 ring-yellow-900/45 dark:bg-yellow-800/25 dark:text-yellow-200 dark:ring-yellow-800/50",
     user:
-      "bg-muted text-muted-foreground ring-border",
+      "bg-green-900/20 text-green-950 ring-green-900/45 dark:bg-green-800/25 dark:text-green-200 dark:ring-green-800/50",
   };
   return (
     <span
@@ -135,11 +135,19 @@ export function TaskStatusBadge({
   );
 }
 
+const ROLE_AVATAR_STYLES: Record<UserRole, string> = {
+  admin: "bg-red-600 text-white",
+  project_manager: "bg-amber-500 text-white",
+  user: "bg-green-600 text-white",
+};
+
 export function UserInitialsAvatar({
   name,
+  role,
   className,
 }: {
   name: string;
+  role?: UserRole;
   className?: string;
 }) {
   const initials = name
@@ -148,10 +156,14 @@ export function UserInitialsAvatar({
     .slice(0, 2)
     .map((s) => s[0]?.toUpperCase())
     .join("");
+  const tone = role
+    ? ROLE_AVATAR_STYLES[role]
+    : "bg-gradient-to-br from-primary/15 to-primary/5 text-primary";
   return (
     <span
       className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary/15 to-primary/5 text-primary text-sm font-semibold ring-1 ring-inset ring-primary/20",
+        "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+        tone,
         className
       )}
     >
