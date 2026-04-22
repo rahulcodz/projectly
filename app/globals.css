@@ -365,6 +365,260 @@
     text-decoration: underline;
   }
 
+  .media-embed-wrap {
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+    margin: 0.25rem 0.5rem 0.25rem 0;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    overflow: hidden;
+    line-height: 0;
+  }
+  .rich-text .media-embed {
+    display: block;
+    margin: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+  .rich-text img.media-embed,
+  .rich-text video.media-embed {
+    width: 150px;
+    height: 150px;
+    object-fit: cover;
+    cursor: zoom-in;
+  }
+  .rich-text video.media-embed {
+    pointer-events: none;
+  }
+  .rich-text audio.media-embed {
+    width: 150px;
+    max-width: 100%;
+    height: 40px;
+  }
+  .rich-text iframe.media-embed-pdf,
+  .rich-text iframe.media-embed-office {
+    width: 150px;
+    height: 150px;
+    background: var(--background);
+    pointer-events: none;
+  }
+  .rich-text iframe.media-embed-youtube,
+  .rich-text iframe.media-embed-vimeo {
+    width: 200px;
+    aspect-ratio: 16 / 9;
+    height: auto;
+    background: black;
+    pointer-events: none;
+  }
+  .media-embed-wrap {
+    cursor: zoom-in;
+    width: 150px;
+    height: 150px;
+  }
+  .media-embed-wrap.has-youtube,
+  .media-embed-wrap.has-vimeo {
+    width: 200px;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+  .media-embed-wrap.has-audio {
+    width: 150px;
+    height: auto;
+  }
+  .media-embed-thumb {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    overflow: hidden;
+    --kind-color: var(--foreground);
+    --kind-bg: var(--muted);
+  }
+  .media-embed-thumb[data-kind="video"] {
+    --kind-color: #1f2937;
+    --kind-bg: #e5e7eb;
+  }
+  .media-embed-thumb[data-kind="audio"] {
+    --kind-color: #ffffff;
+    --kind-bg: #22c55e;
+  }
+  .media-embed-thumb[data-kind="pdf"] {
+    --kind-color: #1f2937;
+    --kind-bg: #ffffff;
+  }
+  .media-embed-thumb[data-kind="office"] {
+    --kind-color: #ffffff;
+    --kind-bg: #16a34a;
+  }
+  .media-embed-thumb[data-kind="image"] {
+    --kind-color: #1f2937;
+    --kind-bg: #f3f4f6;
+  }
+  .media-embed-thumb[data-kind="vimeo"] {
+    --kind-color: #ffffff;
+    --kind-bg: #111827;
+  }
+  .media-embed-thumb {
+    background: var(--kind-bg);
+    color: var(--kind-color);
+  }
+  .media-embed-thumb .icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    color: var(--kind-color);
+  }
+  .media-embed-thumb .icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .media-embed-thumb .label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.25rem 0.375rem;
+    font-size: 0.625rem;
+    line-height: 1.1;
+    text-align: center;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      rgba(0, 0, 0, 0.45)
+    );
+    color: #fff;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .media-embed-thumb[data-kind="pdf"] .label,
+  .media-embed-thumb[data-kind="image"] .label,
+  .media-embed-thumb[data-kind="video"] .label {
+    color: #1f2937;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      rgba(255, 255, 255, 0.85)
+    );
+  }
+  .media-embed-thumb.has-bg {
+    position: relative;
+    background: #000;
+  }
+  .media-embed-thumb.has-bg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.88;
+  }
+  .media-embed-thumb.has-bg .play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+  .media-embed-thumb.has-bg .play::before {
+    content: "";
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 48px;
+    height: 48px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.75);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    z-index: 0;
+  }
+  .media-embed-thumb.has-bg .play svg {
+    position: relative;
+    z-index: 1;
+    color: white;
+  }
+  /* Image fallback (broken) */
+  .rich-text img.media-embed[data-broken="1"] {
+    display: none;
+  }
+  .media-embed-wrap.has-image.is-broken .media-embed-fallback {
+    display: flex;
+  }
+  .media-embed-fallback {
+    display: none;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.5rem;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-size: 0.7rem;
+    text-align: center;
+  }
+  .media-embed-expand {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.65);
+    color: white;
+    border: 0;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms ease, transform 150ms ease, background 150ms ease;
+    line-height: 1;
+  }
+  .media-embed-wrap:hover .media-embed-expand,
+  .media-embed-expand:focus {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .media-embed-expand:hover {
+    background: rgba(0, 0, 0, 0.85);
+  }
+  .rich-text a.media-embed-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--foreground);
+    text-decoration: none;
+    background: var(--muted);
+  }
+  .rich-text a.media-embed-file::before {
+    content: "📄";
+  }
+  .rich-text a.media-embed-file:hover {
+    background: color-mix(in srgb, var(--primary) 10%, var(--muted));
+  }
+
   /* Kill Chrome/Safari autofill's tint — keep theme bg + text color */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,

@@ -18,10 +18,10 @@ import {
   FolderKanban,
   LayoutGrid,
   List as ListIcon,
+  Link2,
   ListChecks,
   MessageSquare,
-  PanelRightClose,
-  PanelRightOpen,
+  Paperclip,
   Pencil,
   Plus,
   Search,
@@ -77,8 +77,12 @@ import {
 import { cn } from "@/lib/utils";
 import { FieldError, FormAlert, RequiredMark } from "@/components/form-error";
 import {
+  MediaLightbox,
+  MediaThumb,
   RichTextEditor,
   RichTextViewer,
+  extractMediaItems,
+  type MediaItem,
   type HashTask,
 } from "@/components/rich-text-editor";
 import { MentionInput } from "@/components/mention-input";
@@ -296,10 +300,10 @@ export default function ProjectDetailPage() {
     "all" | TaskPriorityKey
   >("all");
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string>("all");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tab, setTab] = useState<string>("tasks");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatusKey | null>(null);
+  const [copiedTaskId, setCopiedTaskId] = useState<string | null>(null);
 
   type CommentT = {
     _id: string;
@@ -378,6 +382,45 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     setListPage(1);
   }, [taskQuery, taskStatusFilter, taskPriorityFilter, taskAssigneeFilter]);
+
+  type ProjectFile = MediaItem & {
+    id: string;
+    date?: string;
+    source: string;
+  };
+
+  const projectFiles = useMemo<ProjectFile[]>(() => {
+    if (typeof window === "undefined") return [];
+    const out: ProjectFile[] = [];
+    for (const t of tasks) {
+      if (!t.description) continue;
+      const items = extractMediaItems(t.description);
+      items.forEach((m, i) => {
+        out.push({
+          ...m,
+          id: `task-${t._id}-${i}`,
+          date: t.createdAt,
+          source: t.taskId ? `Task ${t.taskId}` : `Task: ${t.title}`,
+        });
+      });
+    }
+    for (const c of projComments) {
+      if (!c.body) continue;
+      const items = extractMediaItems(c.body);
+      items.forEach((m, i) => {
+        out.push({
+          ...m,
+          id: `comment-${c._id}-${i}`,
+          date: c.createdAt,
+          source: c.author?.name ? `Post by ${c.author.name}` : "Project post",
+        });
+      });
+    }
+    return out;
+  }, [tasks, projComments]);
+
+  const projectFilesCount = projectFiles.length;
+  const [filesLightbox, setFilesLightbox] = useState<MediaItem | null>(null);
 
   const hashTasks = useMemo(() => {
     if (!project) return [];
@@ -564,21 +607,6 @@ export default function ProjectDetailPage() {
   }, [project, loadProjComments]);
 
   const hydratedRef = useRef(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const v = localStorage.getItem("projectly:sidebar");
-      if (v === "0") setSidebarOpen(false);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem("projectly:sidebar", sidebarOpen ? "1" : "0");
-    } catch {}
-  }, [sidebarOpen]);
 
   useEffect(() => {
     if (!project || hydratedRef.current) return;
@@ -975,15 +1003,7 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="-mx-4 -my-6 flex min-h-[calc(100vh-3.5rem)] flex-col sm:-mx-6 sm:-my-8 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:overflow-hidden">
-      <div
-        className={cn(
-          "grid flex-1 lg:min-h-0",
-          sidebarOpen
-            ? "lg:grid-cols-[minmax(0,1fr)_320px]"
-            : "lg:grid-cols-[minmax(0,1fr)_40px]"
-        )}
-      >
-        <div className="flex min-w-0 flex-col lg:min-h-0">
+      <div className="flex flex-1 min-w-0 flex-col lg:min-h-0">
         <Tabs
           value={tab}
           onValueChange={(v) => setTab(v as typeof tab)}
@@ -1009,6 +1029,16 @@ export default function ProjectDetailPage() {
                 <span>Tasks</span>
                 <span className="ml-0.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
                   {tasksLoading ? "…" : tasks.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="files"
+                className={cn(chromeTabClasses, "bg-primary/10 data-[state=active]:bg-primary/15")}
+              >
+                <Paperclip className="size-4 text-muted-foreground group-data-[state=active]:text-primary" />
+                <span>Files</span>
+                <span className="ml-0.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
+                  {projectFilesCount}
                 </span>
               </TabsTrigger>
               {openTaskTabs.map((t) => (
@@ -1053,17 +1083,57 @@ export default function ProjectDetailPage() {
             className="mt-2 flex-1 lg:min-h-0 lg:overflow-y-auto"
           >
             <div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/40 px-4 pb-2 text-sm sm:px-6">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border/40 px-4 py-2 text-sm sm:px-6">
                 <span>
-                  <span className="text-muted-foreground">Name:</span>{" "}
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    ID
+                  </span>{" "}
+                  <span className="font-mono text-xs">{project.projectId}</span>
+                </span>
+                <span className="text-border">|</span>
+                <span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Name
+                  </span>{" "}
                   <span className="font-semibold">{project.name}</span>
                 </span>
-                <span className="text-muted-foreground">|</span>
-                <span>
-                  <span className="text-muted-foreground">ID:</span>{" "}
-                  <span className="font-mono text-sm">{project.projectId}</span>
+                <span className="text-border">|</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Reporting to
+                  </span>
+                  {project.reportingTo ? (
+                    <MinimalPerson user={project.reportingTo} />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </span>
+                <span className="text-border">|</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Assignees
+                  </span>
+                  <span className="rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
+                    {project.assignees.length}
+                  </span>
+                  <AssigneeAvatarRow
+                    users={project.assignees}
+                    canEdit={canEdit}
+                    existingIds={[
+                      ...project.assignees.map((u) => u._id),
+                      ...(project.reportingTo ? [project.reportingTo._id] : []),
+                    ]}
+                    onAdd={addAssignee}
+                    onRemove={removeAssignee}
+                  />
+                </span>
+                <span className="ml-auto flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <span>Created {formatDate(project.createdAt)}</span>
+                  <span className="text-border">·</span>
+                  <span>Updated {formatDate(project.updatedAt)}</span>
                 </span>
               </div>
+
               <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
                 <MessageSquare className="size-3.5 text-muted-foreground" />
                 <h2 className="text-sm font-semibold">Project thread</h2>
@@ -1468,6 +1538,38 @@ export default function ProjectDetailPage() {
                         >
                           {t.title}
                         </button>
+                        <button
+                          type="button"
+                          aria-label="Copy task link"
+                          title={
+                            copiedTaskId === t._id
+                              ? "Copied!"
+                              : "Copy task link"
+                          }
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const url = `${window.location.origin}/dashboard/projects/${project._id}?task=${t._id}`;
+                            try {
+                              await navigator.clipboard.writeText(url);
+                              setCopiedTaskId(t._id);
+                              toast.success("Task link copied");
+                              setTimeout(() => {
+                                setCopiedTaskId((c) =>
+                                  c === t._id ? null : c
+                                );
+                              }, 1500);
+                            } catch {
+                              toast.error("Failed to copy");
+                            }
+                          }}
+                          className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary group-hover/title:opacity-100"
+                        >
+                          {copiedTaskId === t._id ? (
+                            <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <Link2 className="size-3.5" />
+                          )}
+                        </button>
                         {canEdit && (
                           <button
                             type="button"
@@ -1651,6 +1753,66 @@ export default function ProjectDetailPage() {
             </div>
           </TabsContent>
 
+          <TabsContent
+            value="files"
+            className="mt-2 flex-1 lg:min-h-0 lg:overflow-y-auto"
+          >
+            <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
+              <Paperclip className="size-3.5 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Files</h2>
+              <span className="rounded-full border bg-background px-1.5 py-0 text-[11px] font-medium text-muted-foreground">
+                {projectFilesCount}
+              </span>
+              <span className="ml-auto text-[11px] text-muted-foreground">
+                From task descriptions &amp; project thread
+              </span>
+            </div>
+            {projectFilesCount === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-1 p-8 text-center">
+                <Paperclip className="size-5 text-muted-foreground" />
+                <p className="text-sm font-medium">No files yet</p>
+                <p className="text-xs text-muted-foreground">
+                  Paste a media URL in a task description or project post.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 px-4 py-3 sm:px-6">
+                {projectFiles.map((f) => (
+                  <div key={f.id} className="flex flex-col gap-1">
+                    <MediaThumb
+                      item={{ src: f.src, kind: f.kind, filename: f.filename }}
+                      onOpen={() =>
+                        setFilesLightbox({
+                          src: f.src,
+                          kind: f.kind,
+                          filename: f.filename,
+                        })
+                      }
+                    />
+                    <div className="px-0.5 leading-tight">
+                      <div
+                        className="truncate text-[11px] font-medium"
+                        title={f.filename}
+                      >
+                        {f.filename}
+                      </div>
+                      <div className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground">
+                        <span className="truncate" title={f.source}>
+                          {f.source}
+                        </span>
+                        {f.date ? (
+                          <span className="shrink-0">
+                            {formatShortDate(f.date)}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
           {openTaskTabs.map((t) => {
             const state = taskTabs[t._id];
             if (!state) return null;
@@ -1671,6 +1833,33 @@ export default function ProjectDetailPage() {
                     <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
                       {t.title}
                     </h2>
+                    <button
+                      type="button"
+                      aria-label="Copy task link"
+                      title={
+                        copiedTaskId === t._id ? "Copied!" : "Copy task link"
+                      }
+                      onClick={async () => {
+                        const url = `${window.location.origin}/dashboard/projects/${project._id}?task=${t._id}`;
+                        try {
+                          await navigator.clipboard.writeText(url);
+                          setCopiedTaskId(t._id);
+                          toast.success("Task link copied");
+                          setTimeout(() => {
+                            setCopiedTaskId((c) => (c === t._id ? null : c));
+                          }, 1500);
+                        } catch {
+                          toast.error("Failed to copy");
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {copiedTaskId === t._id ? (
+                        <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Link2 className="size-3.5" />
+                      )}
+                    </button>
                     <button
                       type="button"
                       onClick={() => closeTaskTab(t._id)}
@@ -1881,89 +2070,6 @@ export default function ProjectDetailPage() {
         </Tabs>
         </div>
 
-        <aside className="relative flex flex-col border-border/40 lg:border-l">
-          <div
-            className={cn(
-              "hidden h-10 shrink-0 items-center border-b border-border/40 px-2 lg:flex",
-              sidebarOpen ? "justify-end" : "justify-center"
-            )}
-          >
-            <button
-              type="button"
-              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-              onClick={() => setSidebarOpen((v) => !v)}
-              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              {sidebarOpen ? (
-                <PanelRightClose className="size-4" />
-              ) : (
-                <PanelRightOpen className="size-4" />
-              )}
-            </button>
-          </div>
-          <div
-            className={cn(
-              "divide-y divide-border/40 text-sm",
-              !sidebarOpen && "lg:hidden"
-            )}
-          >
-            <SidebarRow label="Project">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                <span>
-                  <span className="text-muted-foreground">Name:</span>{" "}
-                  <span className="font-semibold">{project.name}</span>
-                </span>
-                <span className="text-muted-foreground">|</span>
-                <span>
-                  <span className="text-muted-foreground">ID:</span>{" "}
-                  <span className="font-mono text-xs">{project.projectId}</span>
-                </span>
-              </div>
-            </SidebarRow>
-
-            <SidebarRow label="Reporting to">
-              {project.reportingTo ? (
-                <MinimalPerson user={project.reportingTo} />
-              ) : (
-                <span className="text-xs text-muted-foreground">—</span>
-              )}
-            </SidebarRow>
-
-            <SidebarRow label="Timeline">
-              <div className="flex flex-col gap-1 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Created</span>
-                  <span>{formatDate(project.createdAt)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Updated</span>
-                  <span>{formatDate(project.updatedAt)}</span>
-                </div>
-              </div>
-            </SidebarRow>
-
-            <div className="px-5 py-3">
-              <div className="mb-2 flex items-center gap-2">
-                <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Assignees
-                </h3>
-                <span className="ml-auto rounded-full border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {project.assignees.length}
-                </span>
-              </div>
-              <AssigneeAvatarRow
-                users={project.assignees}
-                canEdit={canEdit}
-                existingIds={project.assignees.map((u) => u._id)}
-                onAdd={addAssignee}
-                onRemove={removeAssignee}
-              />
-            </div>
-          </div>
-        </aside>
-      </div>
-
       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <form onSubmit={handleCreateTask} className="space-y-4">
@@ -2119,6 +2225,11 @@ export default function ProjectDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <MediaLightbox
+        media={filesLightbox}
+        onClose={() => setFilesLightbox(null)}
+      />
     </div>
   );
 }
@@ -2704,23 +2815,6 @@ function AssigneeAvatarRow({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function SidebarRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="px-5 py-3">
-      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      {children}
     </div>
   );
 }

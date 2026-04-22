@@ -17,7 +17,8 @@
       "Bash(pnpm lint *)",
       "Bash(npx eslint *)",
       "Bash(git stash *)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(grep -n \"^    </div>$\" D:/workSpace/projectly/app/dashboard/projects/\\\\[id\\\\]/page.tsx)"
     ]
   }
 }
