@@ -25,13 +25,8 @@ const CommentSchema = new Schema(
 export type CommentShape = InferSchemaType<typeof CommentSchema>;
 export type CommentDoc = CommentShape & { _id: mongoose.Types.ObjectId };
 
-if (mongoose.models.Comment) {
-  mongoose.deleteModel("Comment");
-}
-
-const Comment: Model<CommentDoc> = mongoose.model<CommentDoc>(
-  "Comment",
-  CommentSchema
-);
+const Comment: Model<CommentDoc> =
+  (mongoose.models.Comment as Model<CommentDoc>) ||
+  mongoose.model<CommentDoc>("Comment", CommentSchema);
 
 export default Comment;

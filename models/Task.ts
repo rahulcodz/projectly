@@ -58,10 +58,8 @@ const TaskSchema = new Schema(
 export type TaskShape = InferSchemaType<typeof TaskSchema>;
 export type TaskDoc = TaskShape & { _id: mongoose.Types.ObjectId };
 
-if (mongoose.models.Task) {
-  mongoose.deleteModel("Task");
-}
-
-const Task: Model<TaskDoc> = mongoose.model<TaskDoc>("Task", TaskSchema);
+const Task: Model<TaskDoc> =
+  (mongoose.models.Task as Model<TaskDoc>) ||
+  mongoose.model<TaskDoc>("Task", TaskSchema);
 
 export default Task;
