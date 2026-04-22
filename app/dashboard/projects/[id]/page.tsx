@@ -94,7 +94,11 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { type UserRole } from "@/lib/roles";
-import { type FieldErrors, parseApiError } from "@/lib/form-errors";
+import {
+  type FieldErrors,
+  parseApiError,
+  parseJsonResponse,
+} from "@/lib/form-errors";
 
 type UserLite = PickerUser;
 
@@ -308,8 +312,11 @@ export default function ProjectDetailPage() {
     setError(null);
     try {
       const res = await fetch(`/api/projects/${id}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load project");
+      if (!res.ok) {
+        const { message } = await parseApiError(res);
+        throw new Error(message || "Failed to load project");
+      }
+      const data = await parseJsonResponse<{ project: Project }>(res);
       setProject(data.project);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load project");
@@ -327,8 +334,11 @@ export default function ProjectDetailPage() {
     setTasksLoading(true);
     try {
       const res = await fetch(`/api/projects/${id}/tasks`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load tasks");
+      if (!res.ok) {
+        const { message } = await parseApiError(res);
+        throw new Error(message || "Failed to load tasks");
+      }
+      const data = await parseJsonResponse<{ tasks: Task[] }>(res);
       setTasks(data.tasks ?? []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load tasks");
@@ -346,8 +356,11 @@ export default function ProjectDetailPage() {
     setProjCommentsLoading(true);
     try {
       const res = await fetch(`/api/projects/${id}/comments`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load discussion");
+      if (!res.ok) {
+        const { message } = await parseApiError(res);
+        throw new Error(message || "Failed to load discussion");
+      }
+      const data = await parseJsonResponse<{ comments: CommentT[] }>(res);
       setProjComments(data.comments ?? []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load discussion");

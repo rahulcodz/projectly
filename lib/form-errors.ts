@@ -20,3 +20,14 @@ export async function parseApiError(res: Response): Promise<{
     fieldErrors: data.fieldErrors ?? {},
   };
 }
+
+export async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  try {
+    return (text ? JSON.parse(text) : {}) as T;
+  } catch {
+    throw new Error(
+      `Server returned ${res.status} ${res.statusText || "error"}`
+    );
+  }
+}
