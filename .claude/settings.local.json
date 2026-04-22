@@ -10,7 +10,10 @@
       "Bash(grep -n \"</Link>$\\\\|KanbanCard\" \"D:/workSpace/projectly/app/dashboard/projects/[id]/page.tsx\")",
       "Bash(grep -n \"tasks.map\\(\\(t\\) =>\\\\|<TableRow$\\\\|cursor-pointer hover:bg-accent\" \"D:/workSpace/projectly/app/dashboard/projects/[id]/page.tsx\")",
       "Bash(npm install *)",
-      "Bash(pnpm tsx *)"
+      "Bash(pnpm tsx *)",
+      "Bash(pnpm view *)",
+      "Bash(pnpm remove *)",
+      "Bash(pnpm build *)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import DOMPurify from "isomorphic-dompurify";
+import sanitizeHtml from "sanitize-html";
 
 const ALLOWED_TAGS = [
   "p",
@@ -20,14 +20,18 @@ const ALLOWED_TAGS = [
   "hr",
 ];
 
-const ALLOWED_ATTR = ["href", "target", "rel"];
-
 export function sanitizeRichHtml(input: string): string {
   if (!input) return "";
-  return DOMPurify.sanitize(input, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-    FORBID_ATTR: ["style", "onerror", "onclick"],
+  return sanitizeHtml(input, {
+    allowedTags: ALLOWED_TAGS,
+    allowedAttributes: {
+      a: ["href", "target", "rel"],
+    },
+    disallowedTagsMode: "discard",
+    allowedSchemes: ["http", "https", "mailto"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer" }),
+    },
   });
 }
 
