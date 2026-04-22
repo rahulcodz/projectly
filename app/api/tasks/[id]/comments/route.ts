@@ -7,10 +7,12 @@ import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import Task from "@/models/Task";
 import Comment from "@/models/Comment";
+import User from "@/models/User";
 import { getSession } from "@/lib/auth";
 import { getProjectForSession } from "@/lib/project-access";
 import { validationResponse } from "@/lib/api-errors";
-import { sanitizeRichHtml, stripHtml } from "@/lib/sanitize";
+import { extractMentionIds, sanitizeRichHtml, stripHtml } from "@/lib/sanitize";
+import { getAppUrl, sendMentionEmail } from "@/lib/mailer";
 
 const createSchema = z.object({
   body: z.string().min(1, "Comment cannot be empty"),
@@ -42,10 +44,35 @@ export async function GET(
     const access = await loadTaskWithAccess(id, session);
     if (!access) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const comments = await Comment.find({ task: id })
+    const raw = await Comment.find({ task: id })
       .sort({ createdAt: 1 })
-      .populate("author", "name email role")
       .lean();
+
+    const authorIds = Array.from(
+      new Set(
+        raw.map((c) => (c.author ? String(c.author) : null)).filter(Boolean)
+      )
+    ) as string[];
+    const users = authorIds.length
+      ? await User.find({ _id: { $in: authorIds } })
+          .select("name email role")
+          .lean()
+      : [];
+    const byId = new Map(users.map((u) => [String(u._id), u]));
+
+    const comments = raw.map((c) => {
+      const key = c.author ? String(c.author) : null;
+      let author: unknown = key ? byId.get(key) ?? null : null;
+      if (!author && key && key === session.sub) {
+        author = {
+          _id: session.sub,
+          name: session.name,
+          email: session.email,
+          role: session.role,
+        };
+      }
+      return { ...c, author };
+    });
 
     return NextResponse.json({ comments });
   } catch (err) {
@@ -87,9 +114,79 @@ export async function POST(
       body: sanitized,
     });
 
-    const populated = await Comment.findById(comment._id)
-      .populate("author", "name email role")
-      .lean();
+    const rawNew = await Comment.findById(comment._id).lean();
+    let authorDoc:
+      | { _id: unknown; name: string; email: string; role: string }
+      | null = null;
+    if (rawNew?.author) {
+      const u = await User.findById(rawNew.author)
+        .select("name email role")
+        .lean();
+      if (u)
+        authorDoc = {
+          _id: (u as { _id: unknown })._id,
+          name: (u as { name: string }).name,
+          email: (u as { email: string }).email,
+          role: (u as { role: string }).role,
+        };
+    }
+    if (!authorDoc && rawNew?.author && String(rawNew.author) === session.sub) {
+      authorDoc = {
+        _id: session.sub,
+        name: session.name,
+        email: session.email,
+        role: session.role,
+      };
+    }
+    const populated = rawNew
+      ? { ...rawNew, author: authorDoc ?? null }
+      : null;
+
+    try {
+      const mentionIds = extractMentionIds(sanitized).filter(
+        (mid) => mongoose.Types.ObjectId.isValid(mid) && mid !== session.sub
+      );
+      if (mentionIds.length > 0) {
+        const { task, project } = access;
+        const taskAssignees = (task.assignees ?? []).map((a) => String(a));
+        const taskReporting = (task.reportingPersons ?? []).map((a) =>
+          String(a)
+        );
+        const allowed = new Set<string>([
+          ...(project.assignees ?? []).map((a) => String(a)),
+          ...taskAssignees,
+          ...taskReporting,
+        ]);
+        if (project.reportingTo) allowed.add(String(project.reportingTo));
+        if (project.createdBy) allowed.add(String(project.createdBy));
+        if (task.createdBy) allowed.add(String(task.createdBy));
+
+        const recipientIds = mentionIds.filter((mid) => allowed.has(mid));
+        if (recipientIds.length > 0) {
+          const users = await User.find({ _id: { $in: recipientIds } })
+            .select("name email")
+            .lean();
+          const taskUrl = `${getAppUrl()}/dashboard/projects/${String(
+            project._id
+          )}?task=${String(task._id)}`;
+          const mailJobs = users.map((u) =>
+            sendMentionEmail({
+              to: u.email,
+              recipientName: u.name,
+              actorName: session.name,
+              context: "task",
+              project: { name: project.name, projectId: project.projectId },
+              task: { title: task.title },
+              commentHtml: sanitized,
+              url: taskUrl,
+            })
+          );
+          Promise.allSettled(mailJobs).catch(() => {});
+        }
+      }
+    } catch {
+      // swallow mention email errors
+    }
 
     return NextResponse.json({ comment: populated }, { status: 201 });
   } catch (err) {

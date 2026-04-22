@@ -357,6 +357,88 @@ export async function sendProjectUnassignedEmail(
   });
 }
 
+/* -------------------- Mention (@tag) email -------------------- */
+
+type MentionMailOpts = {
+  to: string;
+  recipientName: string;
+  actorName?: string;
+  context: "project" | "task";
+  project: { name: string; projectId: string };
+  task?: { title: string };
+  commentHtml: string;
+  url: string;
+};
+
+export async function sendMentionEmail(opts: MentionMailOpts): Promise<void> {
+  const transporter = getTransporter();
+  const contextLabel = opts.context === "task" ? "task" : "project";
+  const titleLine =
+    opts.context === "task" && opts.task
+      ? `${opts.project.name} · ${opts.task.title}`
+      : opts.project.name;
+
+  const metaRows = [
+    metaRow("Project", escapeHtml(opts.project.name)),
+    metaRow(
+      "Project ID",
+      `<span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f8fafc;border:1px solid #e2e8f0;padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(
+        opts.project.projectId
+      )}</span>`
+    ),
+    opts.context === "task" && opts.task
+      ? metaRow("Task", escapeHtml(opts.task.title))
+      : "",
+  ].join("");
+
+  const meta = metaTable(metaRows);
+
+  const body = `
+    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:22px;">Hi ${escapeHtml(
+      opts.recipientName
+    )},</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:22px;">${
+      opts.actorName
+        ? `<strong style="color:#0f172a;">${escapeHtml(
+            opts.actorName
+          )}</strong> mentioned you in a ${contextLabel} discussion.`
+        : `You were mentioned in a ${contextLabel} discussion.`
+    }</p>
+    ${meta}
+    <div style="margin:0 0 20px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;color:#0f172a;font-size:13px;line-height:20px;">${
+      opts.commentHtml
+    }</div>
+    <p style="margin:0 0 20px;color:#334155;font-size:14px;line-height:22px;">Open the ${contextLabel} to reply or see the full thread.</p>
+  `;
+
+  const html = layout({
+    title: `You were mentioned`,
+    preheader: `${opts.actorName ?? "Someone"} mentioned you in ${titleLine}`,
+    heading: "You were mentioned",
+    subHeading: titleLine,
+    tone: "info",
+    bodyHtml: body,
+    ctaLabel: opts.context === "task" ? "Open task" : "Open project",
+    ctaUrl: opts.url,
+  });
+
+  const text = `Hi ${opts.recipientName},\n\n${
+    opts.actorName ? `${opts.actorName} ` : "Someone "
+  }mentioned you in ${contextLabel} "${titleLine}".\n\nOpen: ${opts.url}`;
+
+  await transporter.sendMail({
+    from: fromAddress(),
+    to: opts.to,
+    subject: `You were mentioned in ${
+      opts.context === "task" && opts.task
+        ? opts.task.title
+        : opts.project.name
+    }`,
+    text,
+    html,
+  });
+}
+
 /* -------------------- Task assignment -------------------- */
 
 type TaskMailOpts = {

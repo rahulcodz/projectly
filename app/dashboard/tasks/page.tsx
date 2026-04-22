@@ -34,6 +34,7 @@ import {
   type TaskStatusKey,
   UserInitialsAvatar,
 } from "@/components/role-status-badge";
+import { PriorityBadge } from "@/components/priority-badge";
 import { cn } from "@/lib/utils";
 import { type UserRole } from "@/lib/roles";
 
@@ -50,10 +51,15 @@ type ProjectLite = {
   projectId: string;
 };
 
+type TaskPriorityKey = "low" | "medium" | "high" | "urgent";
+
 type Task = {
   _id: string;
   title: string;
   status: TaskStatusKey;
+  priority: TaskPriorityKey;
+  assignedDate: string | null;
+  dueDate: string | null;
   project: ProjectLite | null;
   createdBy: UserLite | null;
   assignees: UserLite[];
@@ -268,10 +274,11 @@ export default function TasksPage() {
             <TableRow className="border-border/40 bg-muted/40 hover:bg-muted/40">
               <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Title</TableHead>
               <TableHead className="h-10 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</TableHead>
+              <TableHead className="h-10 w-28 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Priority</TableHead>
+              <TableHead className="h-10 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Due</TableHead>
               <TableHead className="h-10 w-56 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Project</TableHead>
               <TableHead className="h-10 w-36 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignees</TableHead>
               <TableHead className="h-10 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created by</TableHead>
-              <TableHead className="h-10 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -285,6 +292,12 @@ export default function TasksPage() {
                     <Skeleton className="h-5 w-20 rounded-full" />
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    <Skeleton className="h-4 w-20" />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-4 w-32" />
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
@@ -293,14 +306,11 @@ export default function TasksPage() {
                   <TableCell className="px-3 py-2.5">
                     <Skeleton className="h-4 w-28" />
                   </TableCell>
-                  <TableCell className="px-3 py-2.5">
-                    <Skeleton className="h-4 w-24" />
-                  </TableCell>
                 </TableRow>
               ))
             ) : tasks.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="h-40">
+                <TableCell colSpan={7} className="h-40">
                   <EmptyState
                     hasFilters={hasFilters}
                     onClear={clearFilters}
@@ -333,6 +343,52 @@ export default function TasksPage() {
                     <TaskStatusBadge status={t.status} />
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
+                    <PriorityBadge priority={t.priority} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 text-xs">
+                    {t.dueDate
+                      ? (() => {
+                          const d = new Date(t.dueDate);
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const dm = new Date(d);
+                          dm.setHours(0, 0, 0, 0);
+                          const diff = Math.round(
+                            (dm.getTime() - today.getTime()) /
+                              (24 * 3600 * 1000)
+                          );
+                          const isDone = t.status === "done";
+                          const overdue = !isDone && diff < 0;
+                          const soon = !isDone && diff >= 0 && diff <= 2;
+                          const label = d.toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          });
+                          return (
+                            <span
+                              className={cn(
+                                "font-medium",
+                                overdue &&
+                                  "text-rose-600 dark:text-rose-400",
+                                soon &&
+                                  !overdue &&
+                                  "text-amber-600 dark:text-amber-400",
+                                !overdue &&
+                                  !soon &&
+                                  "text-muted-foreground"
+                              )}
+                            >
+                              {label}
+                              {overdue ? " · overdue" : ""}
+                            </span>
+                          );
+                        })()
+                      : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
                     {t.project ? (
                       <Link
                         href={`/dashboard/projects/${t.project._id}`}
@@ -352,9 +408,6 @@ export default function TasksPage() {
                   </TableCell>
                   <TableCell className="px-3 py-2.5 text-sm text-muted-foreground">
                     {t.createdBy?.name ?? "—"}
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {formatDate(t.createdAt)}
                   </TableCell>
                 </TableRow>
               ))

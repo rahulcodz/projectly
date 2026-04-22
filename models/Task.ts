@@ -19,6 +19,13 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   done: "Done",
 };
 
+export {
+  TASK_PRIORITIES,
+  TASK_PRIORITY_LABELS,
+  type TaskPriority,
+} from "@/lib/task-priority";
+import { TASK_PRIORITIES } from "@/lib/task-priority";
+
 const SubtaskSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -35,6 +42,11 @@ const TaskSchema = new Schema(
       required: true,
       index: true,
     },
+    taskId: {
+      type: String,
+      default: null,
+      index: true,
+    },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
     status: {
@@ -43,6 +55,14 @@ const TaskSchema = new Schema(
       default: "todo",
       required: true,
     },
+    priority: {
+      type: String,
+      enum: TASK_PRIORITIES,
+      default: "medium",
+      required: true,
+    },
+    assignedDate: { type: Date, default: null },
+    dueDate: { type: Date, default: null },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",

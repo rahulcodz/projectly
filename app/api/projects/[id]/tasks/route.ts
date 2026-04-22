@@ -5,17 +5,30 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
-import Task, { TASK_STATUSES, TASK_STATUS_LABELS } from "@/models/Task";
+import Task, {
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  TASK_STATUS_LABELS,
+} from "@/models/Task";
+import { nextSeq } from "@/models/Counter";
 import { getSession } from "@/lib/auth";
 import { getProjectForSession } from "@/lib/project-access";
 import { fieldError, validationResponse } from "@/lib/api-errors";
 import { sanitizeRichHtml } from "@/lib/sanitize";
 import { getAppUrl, sendTaskAssignedEmail } from "@/lib/mailer";
 
+const isoDate = z
+  .union([z.string().datetime(), z.literal(""), z.null()])
+  .optional()
+  .transform((v) => (v ? new Date(v as string) : null));
+
 const createSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters"),
   description: z.string().default(""),
   status: z.enum(TASK_STATUSES).default("todo"),
+  priority: z.enum(TASK_PRIORITIES).default("medium"),
+  assignedDate: isoDate,
+  dueDate: isoDate,
   assignees: z.array(z.string()).default([]),
   reportingPersons: z.array(z.string()).default([]),
 });
@@ -36,6 +49,29 @@ export async function GET(
     await connectDB();
     const project = await getProjectForSession(id, session);
     if (!project) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const missing = await Task.collection
+      .find(
+        {
+          project: project._id,
+          $or: [
+            { taskId: { $exists: false } },
+            { taskId: null },
+            { taskId: "" },
+          ],
+        },
+        { projection: { _id: 1 }, sort: { createdAt: 1 } }
+      )
+      .toArray();
+
+    for (const m of missing) {
+      const seq = await nextSeq(`task:${String(project._id)}`);
+      const tid = `${String(seq).padStart(4, "0")}-${project.projectId}`;
+      await Task.collection.updateOne(
+        { _id: m._id },
+        { $set: { taskId: tid } }
+      );
+    }
 
     const tasks = await Task.find({ project: project._id })
       .sort({ createdAt: -1 })
@@ -74,11 +110,18 @@ export async function POST(
 
     const description = sanitizeRichHtml(parsed.data.description);
 
+    const taskSeq = await nextSeq(`task:${String(project._id)}`);
+    const taskIdStr = `${String(taskSeq).padStart(4, "0")}-${project.projectId}`;
+
     const task = await Task.create({
       project: project._id,
+      taskId: taskIdStr,
       title: parsed.data.title,
       description,
       status: parsed.data.status,
+      priority: parsed.data.priority,
+      assignedDate: parsed.data.assignedDate,
+      dueDate: parsed.data.dueDate,
       createdBy: new mongoose.Types.ObjectId(session.sub),
       assignees: parsed.data.assignees.map(
         (x) => new mongoose.Types.ObjectId(x)
@@ -87,6 +130,12 @@ export async function POST(
         (x) => new mongoose.Types.ObjectId(x)
       ),
     });
+
+    // Guard: if mongoose model cache stripped taskId, write it directly.
+    await Task.collection.updateOne(
+      { _id: task._id },
+      { $set: { taskId: taskIdStr } }
+    );
 
     const populated = await Task.findById(task._id)
       .populate("createdBy", "name email role")

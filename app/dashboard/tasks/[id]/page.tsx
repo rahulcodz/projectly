@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -45,6 +45,11 @@ import {
 import { cn } from "@/lib/utils";
 import { FormAlert } from "@/components/form-error";
 import { RichTextEditor, RichTextViewer } from "@/components/rich-text-editor";
+import {
+  PriorityBadge,
+  PrioritySelect,
+} from "@/components/priority-badge";
+import { DatePicker } from "@/components/ui/date-picker";
 import { type FieldErrors, parseApiError } from "@/lib/form-errors";
 import { type UserRole } from "@/lib/roles";
 
@@ -61,11 +66,17 @@ type ProjectLite = {
   projectId: string;
 };
 
+type TaskPriorityKey = "low" | "medium" | "high" | "urgent";
+
 type Task = {
   _id: string;
+  taskId?: string | null;
   title: string;
   description: string;
   status: TaskStatusKey;
+  priority: TaskPriorityKey;
+  assignedDate: string | null;
+  dueDate: string | null;
   createdBy: UserLite | null;
   assignees: UserLite[];
   reportingPersons: UserLite[];
@@ -125,6 +136,10 @@ export default function TaskDetailPage() {
   const [commentAlert, setCommentAlert] = useState<string | null>(null);
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
 
+  const [projectTasks, setProjectTasks] = useState<
+    { _id: string; taskId: string | null; title: string }[]
+  >([]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -174,6 +189,45 @@ export default function TaskDetailPage() {
     if (task) loadComments();
   }, [task, loadComments]);
 
+  useEffect(() => {
+    if (!task?.project?._id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/projects/${task.project!._id}/tasks`
+        );
+        const data = await res.json();
+        if (!cancelled && res.ok) {
+          setProjectTasks(
+            (data.tasks ?? []).map(
+              (t: { _id: string; taskId?: string | null; title: string }) => ({
+                _id: t._id,
+                taskId: t.taskId ?? null,
+                title: t.title,
+              })
+            )
+          );
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [task?.project?._id]);
+
+  const hashTasks = useMemo(() => {
+    if (!task?.project?._id) return [];
+    return projectTasks
+      .filter((t) => t.taskId && t._id !== task._id)
+      .map((t) => ({
+        _id: t._id,
+        taskId: t.taskId as string,
+        title: t.title,
+        projectId: task.project!._id,
+      }));
+  }, [projectTasks, task]);
+
   async function handleStatusChange(newStatus: TaskStatusKey) {
     if (!task || task.status === newStatus) return;
     const prev = task;
@@ -195,6 +249,52 @@ export default function TaskDetailPage() {
       setTask(prev);
       toast.error(err instanceof Error ? err.message : "Failed to change status");
     }
+  }
+
+  async function patchTask(patch: Record<string, unknown>, label: string) {
+    if (!task) return;
+    const prev = task;
+    try {
+      const res = await fetch(`/api/tasks/${task._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTask(prev);
+        toast.error(data.error || `Failed to update ${label}`);
+        return;
+      }
+      if (data.task) setTask(data.task);
+      toast.success(`${label} updated`);
+    } catch (err) {
+      setTask(prev);
+      toast.error(
+        err instanceof Error ? err.message : `Failed to update ${label}`
+      );
+    }
+  }
+
+  async function handlePriorityChange(p: TaskPriorityKey) {
+    if (!task || task.priority === p) return;
+    setTask({ ...task, priority: p });
+    await patchTask({ priority: p }, "Priority");
+  }
+
+  async function handleAssignedDateChange(d: Date | null) {
+    if (!task) return;
+    setTask({ ...task, assignedDate: d ? d.toISOString() : null });
+    await patchTask(
+      { assignedDate: d ? d.toISOString() : null },
+      "Assigned date"
+    );
+  }
+
+  async function handleDueDateChange(d: Date | null) {
+    if (!task) return;
+    setTask({ ...task, dueDate: d ? d.toISOString() : null });
+    await patchTask({ dueDate: d ? d.toISOString() : null }, "Due date");
   }
 
   async function handlePostComment(e: React.FormEvent) {
@@ -248,6 +348,26 @@ export default function TaskDetailPage() {
   const canManage =
     session?.role === "admin" || session?.role === "project_manager";
 
+  const mentionUsers = useMemo(() => {
+    if (!task) return [];
+    const list: {
+      _id: string;
+      name: string;
+      email?: string;
+      role?: UserRole;
+    }[] = [];
+    const seen = new Set<string>();
+    const push = (u: UserLite | null | undefined) => {
+      if (!u?._id || seen.has(u._id)) return;
+      seen.add(u._id);
+      list.push({ _id: u._id, name: u.name, email: u.email, role: u.role });
+    };
+    for (const a of task.assignees) push(a);
+    for (const a of task.reportingPersons) push(a);
+    push(task.createdBy);
+    return list;
+  }, [task]);
+
   if (loading) return <DetailSkeleton />;
   if (error || !task) return <DetailError message={error ?? "Task not found"} />;
 
@@ -294,6 +414,15 @@ export default function TaskDetailPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <PrioritySelect
+                value={task.priority}
+                onChange={handlePriorityChange}
+              />
+              {task.taskId ? (
+                <span className="font-mono text-sm text-muted-foreground">
+                  {task.taskId}
+                </span>
+              ) : null}
               {task.project && (
                 <Link
                   href={`/dashboard/projects/${task.project._id}`}
@@ -413,8 +542,10 @@ export default function TaskDetailPage() {
                     setNewComment(v);
                     if (commentAlert) setCommentAlert(null);
                   }}
-                  placeholder="Write a comment… Use the toolbar to format."
+                  placeholder="Write a comment — @mention people, #link tasks, paste URLs…"
                   minHeight="min-h-24"
+                  mentionUsers={mentionUsers}
+                  hashTasks={hashTasks}
                 />
                 <div className="flex justify-end">
                   <Button type="submit" disabled={posting} size="sm">
@@ -428,6 +559,62 @@ export default function TaskDetailPage() {
         </div>
 
         <div className="space-y-4">
+          <InfoCard label="Priority & dates" icon={ClipboardList}>
+            <div className="flex flex-col gap-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Priority</span>
+                {canManage ? (
+                  <PrioritySelect
+                    value={task.priority}
+                    onChange={handlePriorityChange}
+                  />
+                ) : (
+                  <PriorityBadge priority={task.priority} />
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Assigned</span>
+                {canManage ? (
+                  <DatePicker
+                    value={
+                      task.assignedDate ? new Date(task.assignedDate) : null
+                    }
+                    onChange={handleAssignedDateChange}
+                    className="h-8 w-44 text-xs"
+                    placeholder="Pick start"
+                  />
+                ) : (
+                  <span className="text-xs">
+                    {task.assignedDate
+                      ? new Date(task.assignedDate).toLocaleDateString(
+                          undefined,
+                          { dateStyle: "medium" }
+                        )
+                      : "—"}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Due</span>
+                {canManage ? (
+                  <DatePicker
+                    value={task.dueDate ? new Date(task.dueDate) : null}
+                    onChange={handleDueDateChange}
+                    className="h-8 w-44 text-xs"
+                    placeholder="Pick due"
+                  />
+                ) : (
+                  <span className="text-xs">
+                    {task.dueDate
+                      ? new Date(task.dueDate).toLocaleDateString(undefined, {
+                          dateStyle: "medium",
+                        })
+                      : "—"}
+                  </span>
+                )}
+              </div>
+            </div>
+          </InfoCard>
           <InfoCard label="Assignees" icon={UsersIcon}>
             <PeopleList users={task.assignees} emptyLabel="No assignees" />
           </InfoCard>

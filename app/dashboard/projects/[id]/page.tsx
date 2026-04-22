@@ -1,17 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { usePathname, useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CalendarDays,
+  Check,
   ClipboardList,
   FolderKanban,
   LayoutGrid,
   List as ListIcon,
   ListChecks,
   MessageSquare,
+  Pencil,
   Plus,
   Search,
   Send,
@@ -65,7 +74,17 @@ import {
 } from "@/components/role-status-badge";
 import { cn } from "@/lib/utils";
 import { FieldError, FormAlert, RequiredMark } from "@/components/form-error";
-import { RichTextEditor, RichTextViewer } from "@/components/rich-text-editor";
+import {
+  RichTextEditor,
+  RichTextViewer,
+  type HashTask,
+} from "@/components/rich-text-editor";
+import { MentionInput } from "@/components/mention-input";
+import { DatePicker } from "@/components/ui/date-picker";
+import {
+  PriorityBadge,
+  PrioritySelect,
+} from "@/components/priority-badge";
 import { type UserLite as PickerUser } from "@/components/user-pickers";
 import {
   Tooltip,
@@ -120,11 +139,17 @@ type Subtask = {
   completed: boolean;
 };
 
+type TaskPriorityKey = "low" | "medium" | "high" | "urgent";
+
 type Task = {
   _id: string;
+  taskId?: string | null;
   title: string;
   description: string;
   status: TaskStatusKey;
+  priority: TaskPriorityKey;
+  assignedDate: string | null;
+  dueDate: string | null;
   createdBy: UserLite | null;
   assignees: UserLite[];
   reportingPersons: UserLite[];
@@ -185,9 +210,59 @@ function formatDate(iso?: string) {
   }
 }
 
+function formatShortDate(iso?: string | null) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function DueDateCell({
+  due,
+  status,
+}: {
+  due: string | null;
+  status: TaskStatusKey;
+}) {
+  if (!due) return <span className="text-xs text-muted-foreground">—</span>;
+  const dueDate = new Date(due);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueMidnight = new Date(dueDate);
+  dueMidnight.setHours(0, 0, 0, 0);
+  const diffDays = Math.round(
+    (dueMidnight.getTime() - today.getTime()) / (24 * 3600 * 1000)
+  );
+  const isDone = status === "done";
+  const overdue = !isDone && diffDays < 0;
+  const soon = !isDone && diffDays >= 0 && diffDays <= 2;
+  return (
+    <span
+      className={cn(
+        "text-xs font-medium",
+        overdue && "text-rose-600 dark:text-rose-400",
+        soon && !overdue && "text-amber-600 dark:text-amber-400",
+        !overdue && !soon && "text-muted-foreground"
+      )}
+      title={dueDate.toLocaleDateString()}
+    >
+      {formatShortDate(due)}
+      {overdue ? " · overdue" : ""}
+    </span>
+  );
+}
+
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const taskParam = searchParams?.get("task") ?? null;
   const id = params?.id;
 
@@ -200,9 +275,13 @@ export default function ProjectDetailPage() {
   const [tasksLoading, setTasksLoading] = useState(true);
 
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [taskEditId, setTaskEditId] = useState<string | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDesc, setTaskDesc] = useState("");
   const [taskStatus, setTaskStatus] = useState<TaskStatusKey>("todo");
+  const [taskPriority, setTaskPriority] = useState<TaskPriorityKey>("medium");
+  const [taskAssignedDate, setTaskAssignedDate] = useState<Date | null>(null);
+  const [taskDueDate, setTaskDueDate] = useState<Date | null>(null);
   const [view, setView] = useState<"list" | "board">("list");
   const [listPage, setListPage] = useState(1);
   const LIST_PAGE_SIZE = 10;
@@ -256,6 +335,57 @@ export default function ProjectDetailPage() {
 
   const canEdit =
     session?.role === "admin" || session?.role === "project_manager";
+
+  const hashTasks = useMemo(() => {
+    if (!project) return [];
+    return tasks
+      .filter((t) => t.taskId)
+      .map((t) => ({
+        _id: t._id,
+        taskId: t.taskId as string,
+        title: t.title,
+        projectId: project._id,
+      }));
+  }, [tasks, project]);
+
+  const projectMembers = useMemo(() => {
+    if (!project) return [];
+    const list: {
+      _id: string;
+      name: string;
+      email?: string;
+      role?: UserRole;
+    }[] = [];
+    const seen = new Set<string>();
+    const push = (u: UserLite | null | undefined) => {
+      if (!u?._id || seen.has(u._id)) return;
+      seen.add(u._id);
+      list.push({ _id: u._id, name: u.name, email: u.email, role: u.role });
+    };
+    push(project.reportingTo);
+    push(project.createdBy);
+    for (const a of project.assignees) push(a);
+    return list;
+  }, [project]);
+
+  const mentionUsersForTask = useCallback(
+    (taskId: string) => {
+      const t = tasks.find((x) => x._id === taskId);
+      if (!t) return projectMembers;
+      const list = [...projectMembers];
+      const seen = new Set(list.map((u) => u._id));
+      const push = (u: UserLite | null | undefined) => {
+        if (!u?._id || seen.has(u._id)) return;
+        seen.add(u._id);
+        list.push({ _id: u._id, name: u.name, email: u.email, role: u.role });
+      };
+      for (const a of t.assignees) push(a);
+      for (const a of t.reportingPersons) push(a);
+      push(t.createdBy);
+      return list;
+    },
+    [projectMembers, tasks]
+  );
 
   async function addAssignee(userId: string) {
     if (!project) return;
@@ -422,6 +552,32 @@ export default function ProjectDetailPage() {
     } catch {}
   }, [project, openTaskIds, tab, taskTabs]);
 
+  useEffect(() => {
+    if (!project || !hydratedRef.current) return;
+    if (!taskParam) return;
+    setOpenTaskIds((prev) =>
+      prev.includes(taskParam) ? prev : [...prev, taskParam]
+    );
+    setTaskTabs((prev) =>
+      prev[taskParam]
+        ? prev
+        : {
+            ...prev,
+            [taskParam]: {
+              comments: [],
+              loading: true,
+              draft: "",
+              composerOpen: false,
+              alert: null,
+              posting: false,
+            },
+          }
+    );
+    setTab(`task:${taskParam}`);
+    if (!taskTabs[taskParam]) loadTaskComments(taskParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskParam, project]);
+
   async function loadTaskComments(taskId: string) {
     updateTaskTab(taskId, { loading: true });
     try {
@@ -474,6 +630,9 @@ export default function ProjectDetailPage() {
       void _;
       return rest;
     });
+    if (taskParam === taskId && pathname) {
+      router.replace(pathname);
+    }
   }
 
   async function postTaskComment(e: React.FormEvent, taskId: string) {
@@ -606,7 +765,11 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function saveSubtasks(taskId: string, nextSubtasks: Subtask[]) {
+  async function saveSubtasks(
+    taskId: string,
+    nextSubtasks: Subtask[],
+    subtaskMention?: { title: string; mentionIds: string[] }
+  ) {
     const prev = tasks;
     setTasks((ts) =>
       ts.map((t) =>
@@ -623,6 +786,9 @@ export default function ProjectDetailPage() {
             title: s.title,
             completed: s.completed,
           })),
+          ...(subtaskMention && subtaskMention.mentionIds.length > 0
+            ? { subtaskMention }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -644,11 +810,30 @@ export default function ProjectDetailPage() {
   }
 
   function openCreateTask() {
+    setTaskEditId(null);
     setTaskTitle("");
     setTaskDesc("");
     setTaskStatus("todo");
+    setTaskPriority("medium");
+    setTaskAssignedDate(null);
+    setTaskDueDate(null);
     setTaskAssignees([]);
     setTaskReporting([]);
+    setTaskErrors({});
+    setTaskAlert(null);
+    setTaskDialogOpen(true);
+  }
+
+  function openEditTask(t: Task) {
+    setTaskEditId(t._id);
+    setTaskTitle(t.title);
+    setTaskDesc(t.description ?? "");
+    setTaskStatus(t.status);
+    setTaskPriority(t.priority ?? "medium");
+    setTaskAssignedDate(t.assignedDate ? new Date(t.assignedDate) : null);
+    setTaskDueDate(t.dueDate ? new Date(t.dueDate) : null);
+    setTaskAssignees(t.assignees);
+    setTaskReporting(t.reportingPersons);
     setTaskErrors({});
     setTaskAlert(null);
     setTaskDialogOpen(true);
@@ -666,14 +851,24 @@ export default function ProjectDetailPage() {
     }
     setTaskErrors({});
     setTaskSubmitting(true);
+    const isEdit = Boolean(taskEditId);
     try {
-      const res = await fetch(`/api/projects/${id}/tasks`, {
-        method: "POST",
+      const url = isEdit
+        ? `/api/tasks/${taskEditId}`
+        : `/api/projects/${id}/tasks`;
+      const method = isEdit ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: taskTitle,
           description: taskDesc,
           status: taskStatus,
+          priority: taskPriority,
+          assignedDate: taskAssignedDate
+            ? taskAssignedDate.toISOString()
+            : null,
+          dueDate: taskDueDate ? taskDueDate.toISOString() : null,
           assignees: taskAssignees.map((u) => u._id),
           reportingPersons: taskReporting.map((u) => u._id),
         }),
@@ -684,8 +879,9 @@ export default function ProjectDetailPage() {
         else setTaskAlert(message);
         return;
       }
-      toast.success("Task created");
+      toast.success(isEdit ? "Task updated" : "Task created");
       setTaskDialogOpen(false);
+      setTaskEditId(null);
       await loadTasks();
     } catch (err) {
       setTaskAlert(err instanceof Error ? err.message : "Request failed");
@@ -770,9 +966,9 @@ export default function ProjectDetailPage() {
             </TabsList>
           </div>
 
-          <TabsContent value="overview" className="mt-4">
+          <TabsContent value="overview" className="mt-2">
             <div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/40 px-4 pb-4 text-base sm:px-6">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/40 px-4 pb-2 text-sm sm:px-6">
                 <span>
                   <span className="text-muted-foreground">Name:</span>{" "}
                   <span className="font-semibold">{project.name}</span>
@@ -783,29 +979,29 @@ export default function ProjectDetailPage() {
                   <span className="font-mono text-sm">{project.projectId}</span>
                 </span>
               </div>
-              <div className="flex items-center gap-2 border-b border-border/40 px-4 pb-3 pt-4 sm:px-6">
-                <MessageSquare className="size-4 text-muted-foreground" />
+              <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
+                <MessageSquare className="size-3.5 text-muted-foreground" />
                 <h2 className="text-sm font-semibold">Project thread</h2>
-                <span className="rounded-full border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                <span className="rounded-full border bg-background px-1.5 py-0 text-[11px] font-medium text-muted-foreground">
                   {projCommentsLoading ? "…" : projComments.length}
                 </span>
               </div>
 
               {projCommentsLoading ? (
-                <div className="space-y-4 p-4">
+                <div className="space-y-3 p-3 sm:px-6">
                   {Array.from({ length: 2 }).map((_, i) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <Skeleton className="size-8 rounded-full" />
+                    <div key={i} className="flex items-start gap-2.5">
+                      <Skeleton className="size-7 rounded-full" />
                       <div className="flex-1 space-y-1.5">
-                        <Skeleton className="h-3.5 w-40" />
+                        <Skeleton className="h-3 w-40" />
                         <Skeleton className="h-3 w-full" />
                       </div>
                     </div>
                   ))}
                 </div>
               ) : projComments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-1 p-6 text-center">
-                  <MessageSquare className="size-5 text-muted-foreground" />
+                <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
+                  <MessageSquare className="size-4 text-muted-foreground" />
                   <p className="text-sm font-medium">No posts yet</p>
                   <p className="text-xs text-muted-foreground">
                     Share updates, context, or questions for the whole project.
@@ -814,14 +1010,14 @@ export default function ProjectDetailPage() {
               ) : (
                 <ul className="divide-y divide-border/40">
                   {projComments.map((c) => (
-                    <li key={c._id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
+                    <li key={c._id} className="flex items-start gap-2 px-4 py-1.5 sm:px-6">
                       <UserInitialsAvatar
                         name={c.author?.name ?? "?"}
                         role={c.author?.role}
-                        className="size-8 text-[10px]"
+                        className="size-6 text-[9px]"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">
                             {c.author?.name ?? "Unknown"}
                           </span>
@@ -830,7 +1026,7 @@ export default function ProjectDetailPage() {
                           )}
                           <span>· {formatDate(c.createdAt)}</span>
                         </div>
-                        <div className="mt-2">
+                        <div className="mt-1">
                           <RichTextViewer html={c.body} />
                         </div>
                       </div>
@@ -839,14 +1035,14 @@ export default function ProjectDetailPage() {
                 </ul>
               )}
 
-              <div className="border-t border-border/40 px-4 py-3 sm:px-6">
+              <div className="border-t border-border/40 px-4 py-1.5 sm:px-6">
                 {!projComposerOpen ? (
                   <button
                     type="button"
                     onClick={() => setProjComposerOpen(true)}
-                    className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-1 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
                   >
-                    <MessageSquare className="size-4 text-muted-foreground" />
+                    <MessageSquare className="size-3.5 text-muted-foreground" />
                     Post an update, question, or note for everyone…
                   </button>
                 ) : (
@@ -858,8 +1054,10 @@ export default function ProjectDetailPage() {
                         setNewProjComment(v);
                         if (commentAlert) setCommentAlert(null);
                       }}
-                      placeholder="Post an update, question, or note for everyone on the project…"
+                      placeholder="Share an update — @mention people, #link tasks, paste URLs…"
                       minHeight="min-h-24"
+                      mentionUsers={projectMembers}
+                      hashTasks={hashTasks}
                     />
                     <div className="flex justify-end gap-2">
                       <Button
@@ -886,9 +1084,9 @@ export default function ProjectDetailPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="tasks" className="mt-4">
+          <TabsContent value="tasks" className="mt-2">
             <div>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/40 px-4 pb-3 sm:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
           <div className="flex items-center gap-2">
             <ListChecks className="size-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Tasks</h2>
@@ -956,7 +1154,7 @@ export default function ProjectDetailPage() {
           </div>
         ) : view === "board" ? (
           <div className="overflow-x-auto">
-            <div className="flex gap-4 px-4 py-3 min-w-max sm:px-6">
+            <div className="flex gap-3 px-4 py-2 min-w-max sm:px-6">
               {BOARD_COLUMNS.map((col) => {
                 const colTasks = tasks.filter((t) => t.status === col);
                 const style = TASK_STATUS_STYLES[col];
@@ -978,26 +1176,26 @@ export default function ProjectDetailPage() {
                       setDragOverCol(null);
                     }}
                     className={cn(
-                      "flex w-80 shrink-0 flex-col rounded-lg border bg-muted/30",
+                      "flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30",
                       isOver && "ring-2 ring-primary/40"
                     )}
                   >
-                    <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2 border-b border-border/40 px-2.5 py-1.5">
+                      <div className="flex items-center gap-1.5">
                         <span
                           className={cn("size-2 rounded-full", style.dot)}
                         />
-                        <span className="text-xs font-semibold uppercase tracking-wide">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide">
                           {style.label}
                         </span>
                       </div>
-                      <span className="rounded-full border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      <span className="rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
                         {colTasks.length}
                       </span>
                     </div>
-                    <div className="flex flex-col gap-2 p-2">
+                    <div className="flex flex-col gap-1.5 p-1.5">
                       {colTasks.length === 0 ? (
-                        <div className="rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground">
+                        <div className="rounded-md border border-dashed py-4 text-center text-xs text-muted-foreground">
                           Drop tasks here
                         </div>
                       ) : (
@@ -1007,7 +1205,9 @@ export default function ProjectDetailPage() {
                             task={t}
                             dragging={draggingId === t._id}
                             projectMembers={project.assignees}
+                            canEdit={canEdit}
                             onOpen={() => openTaskTab(t._id)}
+                            onEdit={() => openEditTask(t)}
                             onAssigneesChange={(next) =>
                               updateTaskAssignees(t._id, next)
                             }
@@ -1030,12 +1230,15 @@ export default function ProjectDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-border/40 bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Title</TableHead>
-                  <TableHead className="h-10 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</TableHead>
-                  <TableHead className="h-10 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignees</TableHead>
-                  <TableHead className="h-10 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reporting</TableHead>
-                  <TableHead className="h-10 w-36 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created by</TableHead>
-                  <TableHead className="h-10 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created</TableHead>
+                  <TableHead className="h-8 w-28 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">ID</TableHead>
+                  <TableHead className="h-8 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Title</TableHead>
+                  <TableHead className="h-8 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</TableHead>
+                  <TableHead className="h-8 w-28 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Priority</TableHead>
+                  <TableHead className="h-8 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assigned</TableHead>
+                  <TableHead className="h-8 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Due</TableHead>
+                  <TableHead className="h-8 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignees</TableHead>
+                  <TableHead className="h-8 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reporting</TableHead>
+                  <TableHead className="h-8 w-36 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created by</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1053,20 +1256,45 @@ export default function ProjectDetailPage() {
                     )}
                     onClick={() => openTaskTab(t._id)}
                   >
-                    <TableCell className="px-3 py-2.5 text-sm font-medium">
-                      <button
-                        type="button"
-                        className="text-left hover:text-primary hover:underline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openTaskTab(t._id);
-                        }}
-                      >
-                        {t.title}
-                      </button>
+                    <TableCell className="px-3 py-1.5">
+                      {t.taskId ? (
+                        <span className="font-mono text-sm text-muted-foreground">
+                          {t.taskId}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5 text-sm font-medium">
+                      <div className="group/title flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="text-left hover:text-primary hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openTaskTab(t._id);
+                          }}
+                        >
+                          {t.title}
+                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            aria-label="Edit task"
+                            title="Edit task"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEditTask(t);
+                            }}
+                            className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary group-hover/title:opacity-100"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell
-                      className="px-3 py-2.5"
+                      className="px-3 py-1.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Select
@@ -1101,8 +1329,20 @@ export default function ProjectDetailPage() {
                         </SelectContent>
                       </Select>
                     </TableCell>
+                    <TableCell className="px-3 py-1.5">
+                      <PriorityBadge priority={t.priority} />
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5 text-xs text-muted-foreground">
+                      {formatShortDate(t.assignedDate)}
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5">
+                      <DueDateCell
+                        due={t.dueDate}
+                        status={t.status}
+                      />
+                    </TableCell>
                     <TableCell
-                      className="px-3 py-2.5"
+                      className="px-3 py-1.5"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <TaskAssigneeRow
@@ -1111,18 +1351,15 @@ export default function ProjectDetailPage() {
                         onChange={(next) => updateTaskAssignees(t._id, next)}
                       />
                     </TableCell>
-                    <TableCell className="px-3 py-2.5">
+                    <TableCell className="px-3 py-1.5">
                       <AssigneeBadges
                         users={t.reportingPersons}
                         max={3}
                         size="sm"
                       />
                     </TableCell>
-                    <TableCell className="px-3 py-2.5 text-sm text-muted-foreground">
+                    <TableCell className="px-3 py-1.5 text-sm text-muted-foreground">
                       {t.createdBy?.name ?? "—"}
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
-                      {formatDate(t.createdAt)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1182,11 +1419,16 @@ export default function ProjectDetailPage() {
               <TabsContent
                 key={t._id}
                 value={`task:${t._id}`}
-                className="mt-4"
+                className="mt-2"
               >
                 <div>
-                  <div className="flex items-center gap-2 border-b border-border/40 px-4 pb-3 sm:px-6">
-                    <MessageSquare className="size-4 text-muted-foreground" />
+                  <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
+                    <MessageSquare className="size-3.5 text-muted-foreground" />
+                    {t.taskId ? (
+                      <span className="font-mono text-sm text-muted-foreground">
+                        {t.taskId}
+                      </span>
+                    ) : null}
                     <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">
                       {t.title}
                     </h2>
@@ -1200,7 +1442,7 @@ export default function ProjectDetailPage() {
                     </button>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 border-b border-border/40 px-4 py-3 sm:px-6">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-border/40 px-4 py-1.5 sm:px-6">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         Status
@@ -1251,8 +1493,8 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
 
-                  <div className="border-b border-border/40 px-4 py-4 sm:px-6">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <div className="border-b border-border/40 px-4 py-2 sm:px-6">
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       {t.createdBy && (
                         <>
                           <span>By {t.createdBy.name}</span>
@@ -1279,24 +1521,28 @@ export default function ProjectDetailPage() {
 
                   <SubtaskPanel
                     task={t}
-                    onSave={(next) => saveSubtasks(t._id, next)}
+                    mentionUsers={mentionUsersForTask(t._id)}
+                    hashTasks={hashTasks}
+                    onSave={(next, subtaskMention) =>
+                      saveSubtasks(t._id, next, subtaskMention)
+                    }
                   />
 
                   {state.loading ? (
-                    <div className="space-y-4 p-4">
+                    <div className="space-y-3 p-3 sm:px-6">
                       {Array.from({ length: 2 }).map((_, i) => (
-                        <div key={i} className="flex items-start gap-3">
-                          <Skeleton className="size-8 rounded-full" />
+                        <div key={i} className="flex items-start gap-2.5">
+                          <Skeleton className="size-7 rounded-full" />
                           <div className="flex-1 space-y-1.5">
-                            <Skeleton className="h-3.5 w-40" />
+                            <Skeleton className="h-3 w-40" />
                             <Skeleton className="h-3 w-full" />
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : state.comments.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-1 p-6 text-center">
-                      <MessageSquare className="size-5 text-muted-foreground" />
+                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
+                      <MessageSquare className="size-4 text-muted-foreground" />
                       <p className="text-sm font-medium">No comments yet</p>
                       <p className="text-xs text-muted-foreground">
                         Start the task discussion below.
@@ -1305,14 +1551,14 @@ export default function ProjectDetailPage() {
                   ) : (
                     <ul className="divide-y divide-border/40">
                       {state.comments.map((c) => (
-                        <li key={c._id} className="flex items-start gap-3 px-4 py-4 sm:px-6">
+                        <li key={c._id} className="flex items-start gap-2 px-4 py-1.5 sm:px-6">
                           <UserInitialsAvatar
                             name={c.author?.name ?? "?"}
                             role={c.author?.role}
-                            className="size-8 text-[10px]"
+                            className="size-6 text-[9px]"
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                               <span className="font-medium text-foreground">
                                 {c.author?.name ?? "Unknown"}
                               </span>
@@ -1321,7 +1567,7 @@ export default function ProjectDetailPage() {
                               )}
                               <span>· {formatDate(c.createdAt)}</span>
                             </div>
-                            <div className="mt-2">
+                            <div className="mt-1">
                               <RichTextViewer html={c.body} />
                             </div>
                           </div>
@@ -1330,16 +1576,16 @@ export default function ProjectDetailPage() {
                     </ul>
                   )}
 
-                  <div className="border-t border-border/40 px-4 py-3 sm:px-6">
+                  <div className="border-t border-border/40 px-4 py-1.5 sm:px-6">
                     {!state.composerOpen ? (
                       <button
                         type="button"
                         onClick={() =>
                           updateTaskTab(t._id, { composerOpen: true })
                         }
-                        className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-1 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       >
-                        <MessageSquare className="size-4 text-muted-foreground" />
+                        <MessageSquare className="size-3.5 text-muted-foreground" />
                         Reply to this task…
                       </button>
                     ) : (
@@ -1356,8 +1602,10 @@ export default function ProjectDetailPage() {
                               alert: state.alert ? null : state.alert,
                             });
                           }}
-                          placeholder="Reply to this task…"
+                          placeholder="Reply — @mention, #link tasks, paste URLs…"
                           minHeight="min-h-20"
+                          mentionUsers={mentionUsersForTask(t._id)}
+                          hashTasks={hashTasks}
                         />
                         <div className="flex justify-end gap-2">
                           <Button
@@ -1456,9 +1704,11 @@ export default function ProjectDetailPage() {
         <DialogContent className="sm:max-w-xl">
           <form onSubmit={handleCreateTask} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Add task</DialogTitle>
+              <DialogTitle>{taskEditId ? "Edit task" : "Add task"}</DialogTitle>
               <DialogDescription>
-                Create a task under {project.name}.
+                {taskEditId
+                  ? `Update details for this task in ${project.name}.`
+                  : `Create a task under ${project.name}.`}
               </DialogDescription>
             </DialogHeader>
 
@@ -1490,9 +1740,11 @@ export default function ProjectDetailPage() {
               <RichTextEditor
                 value={taskDesc}
                 onChange={setTaskDesc}
-                placeholder="Describe the task. Add notes, acceptance criteria, links…"
+                placeholder="Describe the task — @mention people, #link tasks, paste URLs…"
                 minHeight="min-h-32"
                 invalid={Boolean(taskErrors.description)}
+                mentionUsers={projectMembers}
+                hashTasks={hashTasks}
               />
               <FieldError message={taskErrors.description} />
             </div>
@@ -1525,6 +1777,49 @@ export default function ProjectDetailPage() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
+                <Label>Priority</Label>
+                <PrioritySelect
+                  value={taskPriority}
+                  onChange={setTaskPriority}
+                  triggerClassName="h-9 w-full text-sm"
+                  size="default"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="task-assigned">Assigned date</Label>
+                <DatePicker
+                  id="task-assigned"
+                  value={taskAssignedDate}
+                  onChange={setTaskAssignedDate}
+                  placeholder="Pick start date"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="task-due">Due date</Label>
+                <DatePicker
+                  id="task-due"
+                  value={taskDueDate}
+                  onChange={setTaskDueDate}
+                  placeholder="Pick due date"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label>Assignees</Label>
+                <ProjectUserPicker
+                  options={project.assignees}
+                  selected={taskAssignees}
+                  onChange={setTaskAssignees}
+                  placeholder="Select assignees"
+                />
+                <FieldError message={taskErrors.assignees} />
+              </div>
+              <div className="grid gap-1.5">
                 <Label>Reporting persons</Label>
                 <ProjectUserPicker
                   options={project.assignees}
@@ -1534,17 +1829,6 @@ export default function ProjectDetailPage() {
                 />
                 <FieldError message={taskErrors.reportingPersons} />
               </div>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>Assignees</Label>
-              <ProjectUserPicker
-                options={project.assignees}
-                selected={taskAssignees}
-                onChange={setTaskAssignees}
-                placeholder="Select assignees"
-              />
-              <FieldError message={taskErrors.assignees} />
             </div>
 
             <DialogFooter>
@@ -1557,7 +1841,13 @@ export default function ProjectDetailPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={taskSubmitting}>
-                {taskSubmitting ? "Creating…" : "Create task"}
+                {taskSubmitting
+                  ? taskEditId
+                    ? "Saving…"
+                    : "Creating…"
+                  : taskEditId
+                  ? "Save changes"
+                  : "Create task"}
               </Button>
             </DialogFooter>
           </form>
@@ -1567,12 +1857,62 @@ export default function ProjectDetailPage() {
   );
 }
 
+function renderSubtaskTitle(
+  title: string,
+  hashTasks: HashTask[] | undefined
+) {
+  if (!hashTasks || hashTasks.length === 0) return title;
+  const byTaskId = new Map(hashTasks.map((t) => [t.taskId, t]));
+  const parts: ReactNode[] = [];
+  const re = /#([A-Za-z0-9_-]+)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = re.exec(title)) !== null) {
+    if (match.index > last) parts.push(title.slice(last, match.index));
+    const ref = byTaskId.get(match[1]);
+    if (ref) {
+      parts.push(
+        <a
+          key={key++}
+          href={`/dashboard/projects/${ref.projectId}?task=${ref.id}`}
+          className="task-ref"
+          data-type="hashtag"
+          data-id={ref.id}
+          data-label={ref.taskId}
+          data-project-id={ref.projectId}
+          onClick={(e) => e.stopPropagation()}
+        >
+          #{ref.taskId}
+        </a>
+      );
+    } else {
+      parts.push(match[0]);
+    }
+    last = match.index + match[0].length;
+  }
+  if (last < title.length) parts.push(title.slice(last));
+  return parts;
+}
+
 function SubtaskPanel({
   task,
+  mentionUsers,
+  hashTasks,
   onSave,
 }: {
   task: Task;
-  onSave: (next: Subtask[]) => void | Promise<void>;
+  mentionUsers?: {
+    _id: string;
+    name: string;
+    email?: string;
+    role?: UserRole;
+  }[];
+  hashTasks?: HashTask[];
+  onSave: (
+    next: Subtask[],
+    subtaskMention?: { title: string; mentionIds: string[] }
+  ) => void | Promise<void>;
 }) {
   const subtasks = task.subtasks ?? [];
   const total = subtasks.length;
@@ -1583,6 +1923,11 @@ function SubtaskPanel({
   const [draft, setDraft] = useState("");
   const [adding, setAdding] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<Subtask | null>(null);
+  const [draftMentions, setDraftMentions] = useState<Set<string>>(new Set());
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [editMentions, setEditMentions] = useState<Set<string>>(new Set());
 
   function addSubtask(e: React.FormEvent) {
     e.preventDefault();
@@ -1592,9 +1937,14 @@ function SubtaskPanel({
       ...subtasks,
       { _id: `tmp-${Date.now()}`, title, completed: false },
     ];
+    const mentionIds = title.includes("@") ? Array.from(draftMentions) : [];
     setDraft("");
+    setDraftMentions(new Set());
     setAdding(false);
-    onSave(next);
+    onSave(
+      next,
+      mentionIds.length > 0 ? { title, mentionIds } : undefined
+    );
   }
 
   function toggle(id: string) {
@@ -1611,13 +1961,53 @@ function SubtaskPanel({
     onSave(subtasks.filter((s) => s._id !== id));
   }
 
+  function startEdit(s: Subtask) {
+    setEditingId(s._id);
+    setEditDraft(s.title);
+    setEditMentions(new Set());
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft("");
+    setEditMentions(new Set());
+  }
+
+  function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    const title = editDraft.trim();
+    if (title.length === 0) return;
+    const target = subtasks.find((s) => s._id === editingId);
+    if (!target) {
+      cancelEdit();
+      return;
+    }
+    if (title === target.title && editMentions.size === 0) {
+      cancelEdit();
+      return;
+    }
+    const next = subtasks.map((s) =>
+      s._id === editingId ? { ...s, title } : s
+    );
+    const mentionIds =
+      title.includes("@") && editMentions.size > 0
+        ? Array.from(editMentions)
+        : [];
+    cancelEdit();
+    onSave(
+      next,
+      mentionIds.length > 0 ? { title, mentionIds } : undefined
+    );
+  }
+
   return (
-    <div className="border-b border-border/40 px-4 py-4 sm:px-6">
-      <div className="mb-3 flex items-center gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="border-b border-border/40 px-4 py-2 sm:px-6">
+      <div className="mb-1.5 flex items-center gap-2">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Subtasks
         </h3>
-        <span className="rounded-full border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        <span className="rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
           {done}/{total}
         </span>
         {total > 0 && (
@@ -1639,36 +2029,88 @@ function SubtaskPanel({
       </div>
 
       {total > 0 && (
-        <ul className="mb-2 flex flex-col gap-1">
-          {subtasks.map((s) => (
-            <li
-              key={s._id}
-              className="group flex items-center gap-2 rounded-md px-1 py-1 hover:bg-muted/40"
-            >
-              <input
-                type="checkbox"
-                checked={s.completed}
-                onChange={() => toggle(s._id)}
-                className="size-4 accent-primary"
-              />
-              <span
-                className={cn(
-                  "flex-1 text-sm",
-                  s.completed && "text-muted-foreground line-through"
+        <ul className="mb-1.5 flex flex-col gap-0.5">
+          {subtasks.map((s) => {
+            const isEditing = editingId === s._id;
+            return (
+              <li
+                key={s._id}
+                className="group flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-muted/40"
+              >
+                <input
+                  type="checkbox"
+                  checked={s.completed}
+                  onChange={() => toggle(s._id)}
+                  disabled={isEditing}
+                  className="size-4 accent-primary"
+                />
+                {isEditing ? (
+                  <form
+                    onSubmit={saveEdit}
+                    className="flex flex-1 items-center gap-2"
+                  >
+                    <MentionInput
+                      value={editDraft}
+                      onChange={setEditDraft}
+                      onMention={(id) =>
+                        setEditMentions((prev) => {
+                          const next = new Set(prev);
+                          next.add(id);
+                          return next;
+                        })
+                      }
+                      mentionUsers={mentionUsers}
+                      hashTasks={hashTasks}
+                      placeholder="Edit subtask — @mention, #link tasks"
+                      autoFocus
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={editDraft.trim().length === 0}
+                    >
+                      <Check className="size-3.5" /> Save
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelEdit}
+                    >
+                      Cancel
+                    </Button>
+                  </form>
+                ) : (
+                  <>
+                    <span
+                      className={cn(
+                        "flex-1 text-sm",
+                        s.completed && "text-muted-foreground line-through"
+                      )}
+                    >
+                      {renderSubtaskTitle(s.title, hashTasks)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(s)}
+                      aria-label="Edit subtask"
+                      className="opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPendingRemove(s)}
+                      aria-label="Remove subtask"
+                      className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </>
                 )}
-              >
-                {s.title}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPendingRemove(s)}
-                aria-label="Remove subtask"
-                className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-              >
-                <X className="size-3.5" />
-              </button>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -1699,12 +2141,20 @@ function SubtaskPanel({
 
       {adding ? (
         <form onSubmit={addSubtask} className="flex items-center gap-2">
-          <Input
+          <MentionInput
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="New subtask"
+            onChange={setDraft}
+            onMention={(id) =>
+              setDraftMentions((prev) => {
+                const next = new Set(prev);
+                next.add(id);
+                return next;
+              })
+            }
+            mentionUsers={mentionUsers}
+            hashTasks={hashTasks}
+            placeholder="New subtask — @mention, #link tasks"
             autoFocus
-            className="h-8 shadow-none"
           />
           <Button type="submit" size="sm" disabled={draft.trim().length === 0}>
             Add
@@ -1715,6 +2165,7 @@ function SubtaskPanel({
             variant="outline"
             onClick={() => {
               setDraft("");
+              setDraftMentions(new Set());
               setAdding(false);
             }}
           >
@@ -1842,7 +2293,7 @@ function AssigneeAvatarRow({
           {users.map((u) => (
             <Tooltip key={u._id}>
               <TooltipTrigger asChild>
-                <div className="group relative z-0 transition-transform hover:z-20 hover:scale-110">
+                <div className="relative z-0 hover:z-20">
                   <div
                     className={cn(
                       "flex size-8 items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold",
@@ -1860,7 +2311,7 @@ function AssigneeAvatarRow({
                         e.stopPropagation();
                         setConfirmUser(u);
                       }}
-                      className="absolute inset-0 flex items-center justify-center rounded-full border-2 border-background bg-destructive text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      className="absolute inset-0 flex items-center justify-center rounded-full border-2 border-background bg-destructive text-white opacity-0 transition-opacity hover:opacity-100"
                     >
                       <X className="size-3.5" />
                     </button>
@@ -2100,7 +2551,9 @@ function KanbanCard({
   task,
   dragging,
   projectMembers,
+  canEdit,
   onOpen,
+  onEdit,
   onAssigneesChange,
   onDragStart,
   onDragEnd,
@@ -2108,7 +2561,9 @@ function KanbanCard({
   task: Task;
   dragging: boolean;
   projectMembers: UserLite[];
+  canEdit?: boolean;
   onOpen: () => void;
+  onEdit?: () => void;
   onAssigneesChange: (next: UserLite[]) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -2132,21 +2587,66 @@ function KanbanCard({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "group cursor-grab select-none rounded-lg border p-4 shadow-sm transition-all hover:shadow-md",
+        "group cursor-grab select-none rounded-lg border p-2.5 shadow-sm transition-all hover:shadow-md",
         TASK_STATUS_STYLES[task.status].card,
         dragging && "opacity-40 cursor-grabbing"
       )}
     >
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          {task.taskId ? (
+            <span className="font-mono text-xs text-muted-foreground">
+              {task.taskId}
+            </span>
+          ) : null}
+          <PriorityBadge priority={task.priority} />
+        </div>
+        {canEdit && onEdit ? (
+          <button
+            type="button"
+            aria-label="Edit task"
+            title="Edit task"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEdit();
+            }}
+            draggable={false}
+            onDragStart={(e) => e.stopPropagation()}
+            className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary group-hover:opacity-100"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        ) : null}
+      </div>
       <div className="text-sm font-semibold leading-snug line-clamp-2">
         {task.title}
       </div>
       {task.description && task.description.trim() !== "" && (
-        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
           {task.description.replace(/<[^>]+>/g, "").slice(0, 140)}
         </p>
       )}
+      {(task.assignedDate || task.dueDate) && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+          {task.assignedDate ? (
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <CalendarDays className="size-3" />
+              <span className="font-medium text-foreground/80">Start</span>
+              <span>{formatShortDate(task.assignedDate)}</span>
+            </span>
+          ) : null}
+          {task.dueDate ? (
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <CalendarDays className="size-3" />
+              <span className="font-medium text-foreground/80">Due</span>
+              <DueDateCell due={task.dueDate} status={task.status} />
+            </span>
+          ) : null}
+        </div>
+      )}
       <div
-        className="mt-4 flex items-center justify-between gap-2"
+        className="mt-2 flex items-center justify-between gap-2"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         draggable={false}
@@ -2208,7 +2708,7 @@ function TaskAssigneeRow({
           {selected.map((u) => (
             <Tooltip key={u._id}>
               <TooltipTrigger asChild>
-                <div className="group relative z-0 transition-transform hover:z-20 hover:scale-110">
+                <div className="relative z-0 hover:z-20">
                   <div
                     className={cn(
                       "flex size-7 items-center justify-center rounded-full border-2 border-background text-[9px] font-semibold",
@@ -2225,7 +2725,7 @@ function TaskAssigneeRow({
                       e.stopPropagation();
                       setConfirmUser(u);
                     }}
-                    className="absolute inset-0 flex items-center justify-center rounded-full border-2 border-background bg-destructive text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute inset-0 flex items-center justify-center rounded-full border-2 border-background bg-destructive text-white opacity-0 transition-opacity hover:opacity-100"
                   >
                     <X className="size-3" />
                   </button>

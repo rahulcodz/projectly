@@ -5,7 +5,11 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
-import Task, { TASK_STATUSES, TASK_STATUS_LABELS } from "@/models/Task";
+import Task, {
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  TASK_STATUS_LABELS,
+} from "@/models/Task";
 import User from "@/models/User";
 import { getSession } from "@/lib/auth";
 import { getProjectForSession, canManageProject } from "@/lib/project-access";
@@ -13,6 +17,7 @@ import { fieldError, validationResponse } from "@/lib/api-errors";
 import { sanitizeRichHtml } from "@/lib/sanitize";
 import {
   getAppUrl,
+  sendMentionEmail,
   sendTaskAssignedEmail,
   sendTaskUnassignedEmail,
 } from "@/lib/mailer";
@@ -23,13 +28,27 @@ const subtaskSchema = z.object({
   completed: z.boolean().default(false),
 });
 
+const isoDate = z
+  .union([z.string().datetime(), z.literal(""), z.null()])
+  .optional()
+  .transform((v) => (v === undefined ? undefined : v ? new Date(v as string) : null));
+
 const updateSchema = z.object({
   title: z.string().min(2, "Title must be at least 2 characters").optional(),
   description: z.string().optional(),
   status: z.enum(TASK_STATUSES).optional(),
+  priority: z.enum(TASK_PRIORITIES).optional(),
+  assignedDate: isoDate,
+  dueDate: isoDate,
   assignees: z.array(z.string()).optional(),
   reportingPersons: z.array(z.string()).optional(),
   subtasks: z.array(subtaskSchema).optional(),
+  subtaskMention: z
+    .object({
+      title: z.string().min(1),
+      mentionIds: z.array(z.string()),
+    })
+    .optional(),
 });
 
 function isValidId(id: string) {
@@ -130,6 +149,10 @@ export async function PATCH(
     if (parsed.data.description !== undefined) {
       update.description = sanitizeRichHtml(parsed.data.description);
     }
+    if (parsed.data.priority !== undefined) update.priority = parsed.data.priority;
+    if (parsed.data.assignedDate !== undefined)
+      update.assignedDate = parsed.data.assignedDate;
+    if (parsed.data.dueDate !== undefined) update.dueDate = parsed.data.dueDate;
 
     const nextSubtasks =
       parsed.data.subtasks !== undefined
@@ -294,6 +317,60 @@ export async function PATCH(
         }
       } catch {
         // swallow
+      }
+
+      // Subtask mention email
+      try {
+        const sm = parsed.data.subtaskMention;
+        if (sm && sm.mentionIds.length > 0) {
+          const ids = sm.mentionIds.filter(
+            (x) => isValidId(x) && x !== session.sub
+          );
+          if (ids.length > 0) {
+            const project = access.project;
+            const allowed = new Set<string>([
+              ...(project.assignees ?? []).map((a) => String(a)),
+              ...(access.task.assignees ?? []).map((a) => String(a)),
+              ...(access.task.reportingPersons ?? []).map((a) => String(a)),
+            ]);
+            if (project.reportingTo)
+              allowed.add(String(project.reportingTo));
+            if (project.createdBy) allowed.add(String(project.createdBy));
+            if (access.task.createdBy)
+              allowed.add(String(access.task.createdBy));
+            const recipientIds = ids.filter((x) => allowed.has(x));
+            if (recipientIds.length > 0) {
+              const users = await User.find({ _id: { $in: recipientIds } })
+                .select("name email")
+                .lean();
+              const escSubtask = sm.title
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+              const taskUrl = `${getAppUrl()}/dashboard/projects/${String(
+                project._id
+              )}?task=${String(access.task._id)}`;
+              const mailJobs = users.map((u) =>
+                sendMentionEmail({
+                  to: u.email,
+                  recipientName: u.name,
+                  actorName: session.name,
+                  context: "task",
+                  project: {
+                    name: project.name,
+                    projectId: project.projectId,
+                  },
+                  task: { title: access.task.title },
+                  commentHtml: `<p style="margin:0;"><strong>New subtask:</strong> ${escSubtask}</p>`,
+                  url: taskUrl,
+                })
+              );
+              Promise.allSettled(mailJobs).catch(() => {});
+            }
+          }
+        }
+      } catch {
+        // swallow subtask mention email errors
       }
     }
 
