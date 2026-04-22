@@ -15,7 +15,9 @@
       "Bash(pnpm remove *)",
       "Bash(pnpm build *)",
       "Bash(pnpm lint *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(git stash *)",
+      "Bash(npx next *)"
     ]
   }
 }

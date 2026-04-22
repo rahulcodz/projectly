@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   FolderKanban,
@@ -672,6 +673,7 @@ export default function ProjectsPage() {
                     if (formErrors.assignees)
                       setFormErrors((p) => ({ ...p, assignees: "" }));
                   }}
+                  excludeIds={reportingUser ? [reportingUser._id] : []}
                 />
                 {formErrors.assignees ? (
                   <FieldError message={formErrors.assignees} />
@@ -966,27 +968,29 @@ function ReportingPicker({
         <button
           type="button"
           className={cn(
-            "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm",
+            "flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border bg-background px-3 text-left text-sm",
             "focus:border-primary/60 focus:ring-2 focus:ring-primary/30 focus:outline-none",
             controlClasses
           )}
         >
           {selected ? (
-            <span className="flex min-w-0 items-center gap-2">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
               <UserInitialsAvatar
                 name={selected.name}
                 role={selected.role}
-                className="size-5 text-[9px]"
+                className="size-5 shrink-0 text-[9px]"
               />
-              <span className="truncate">{selected.name}</span>
-              <span className="truncate text-xs text-muted-foreground">
+              <span className="min-w-0 flex-shrink truncate">
+                {selected.name}
+              </span>
+              <span className="min-w-0 flex-shrink truncate text-xs text-muted-foreground">
                 {selected.email}
               </span>
             </span>
           ) : (
             <span className="text-muted-foreground">Select person</span>
           )}
-          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -1024,12 +1028,18 @@ function ReportingPicker({
 function AssigneesPicker({
   selected,
   onChange,
+  excludeIds,
 }: {
   selected: UserLite[];
   onChange: (list: UserLite[]) => void;
+  excludeIds?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const { query, setQuery, results, loading, error } = useUserSearch(open);
+  const excludeSet = new Set(excludeIds ?? []);
+  const visibleResults = excludeSet.size
+    ? results.filter((u) => !excludeSet.has(u._id))
+    : results;
 
   function toggle(u: UserLite) {
     if (selected.some((s) => s._id === u._id)) {
@@ -1101,7 +1111,7 @@ function AssigneesPicker({
         <UserSearchList
           loading={loading}
           error={error}
-          results={results}
+          results={visibleResults}
           isSelected={(id) => selected.some((s) => s._id === id)}
           onPick={(u) => toggle(u)}
         />

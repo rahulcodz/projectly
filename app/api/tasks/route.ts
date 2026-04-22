@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Task, { TASK_STATUSES } from "@/models/Task";
+import { TASK_PRIORITIES } from "@/lib/task-priority";
 import { getSession } from "@/lib/auth";
 
 function escapeRegex(s: string) {
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
     const q = searchParams.get("q")?.trim() ?? "";
     const projectId = searchParams.get("project") ?? "";
     const status = searchParams.get("status") ?? "all";
+    const priority = searchParams.get("priority") ?? "all";
     const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
     const limit = Math.min(
       100,
@@ -41,6 +43,10 @@ export async function GET(req: NextRequest) {
 
     if ((TASK_STATUSES as readonly string[]).includes(status)) {
       filter.status = status;
+    }
+
+    if ((TASK_PRIORITIES as readonly string[]).includes(priority)) {
+      filter.priority = priority;
     }
 
     if (q) {

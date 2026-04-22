@@ -20,6 +20,8 @@ import {
   List as ListIcon,
   ListChecks,
   MessageSquare,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Plus,
   Search,
@@ -264,6 +266,7 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const pathname = usePathname();
   const taskParam = searchParams?.get("task") ?? null;
+  const editParam = searchParams?.get("edit") ?? null;
   const id = params?.id;
 
   const [project, setProject] = useState<Project | null>(null);
@@ -285,6 +288,15 @@ export default function ProjectDetailPage() {
   const [view, setView] = useState<"list" | "board">("list");
   const [listPage, setListPage] = useState(1);
   const LIST_PAGE_SIZE = 10;
+  const [taskQuery, setTaskQuery] = useState("");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<
+    "all" | TaskStatusKey
+  >("all");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<
+    "all" | TaskPriorityKey
+  >("all");
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string>("all");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [tab, setTab] = useState<string>("tasks");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatusKey | null>(null);
@@ -335,6 +347,37 @@ export default function ProjectDetailPage() {
 
   const canEdit =
     session?.role === "admin" || session?.role === "project_manager";
+
+  const filteredTasks = useMemo(() => {
+    const q = taskQuery.trim().toLowerCase();
+    return tasks.filter((t) => {
+      if (q && !t.title.toLowerCase().includes(q)) return false;
+      if (taskStatusFilter !== "all" && t.status !== taskStatusFilter)
+        return false;
+      if (taskPriorityFilter !== "all" && t.priority !== taskPriorityFilter)
+        return false;
+      if (taskAssigneeFilter !== "all") {
+        if (taskAssigneeFilter === "__unassigned") {
+          if ((t.assignees?.length ?? 0) > 0) return false;
+        } else if (
+          !(t.assignees ?? []).some((a) => a._id === taskAssigneeFilter)
+        ) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [tasks, taskQuery, taskStatusFilter, taskPriorityFilter, taskAssigneeFilter]);
+
+  const hasTaskFilters =
+    Boolean(taskQuery.trim()) ||
+    taskStatusFilter !== "all" ||
+    taskPriorityFilter !== "all" ||
+    taskAssigneeFilter !== "all";
+
+  useEffect(() => {
+    setListPage(1);
+  }, [taskQuery, taskStatusFilter, taskPriorityFilter, taskAssigneeFilter]);
 
   const hashTasks = useMemo(() => {
     if (!project) return [];
@@ -481,6 +524,23 @@ export default function ProjectDetailPage() {
     if (project) loadTasks();
   }, [project, loadTasks]);
 
+  const editHandledRef = useRef(false);
+  useEffect(() => {
+    if (editParam !== "1" || !taskParam || !project) return;
+    if (editHandledRef.current) return;
+    const t = tasks.find((x) => x._id === taskParam);
+    if (!t) return;
+    editHandledRef.current = true;
+    openEditTask(t);
+    if (pathname) {
+      const sp = new URLSearchParams(searchParams?.toString() ?? "");
+      sp.delete("edit");
+      const qs = sp.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParam, taskParam, project, tasks]);
+
   const loadProjComments = useCallback(async () => {
     if (!id) return;
     setProjCommentsLoading(true);
@@ -504,6 +564,21 @@ export default function ProjectDetailPage() {
   }, [project, loadProjComments]);
 
   const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const v = localStorage.getItem("projectly:sidebar");
+      if (v === "0") setSidebarOpen(false);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("projectly:sidebar", sidebarOpen ? "1" : "0");
+    } catch {}
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (!project || hydratedRef.current) return;
@@ -899,13 +974,20 @@ export default function ProjectDetailPage() {
     .filter((t): t is Task => Boolean(t));
 
   return (
-    <div className="-mx-4 -my-6 flex min-h-[calc(100vh-3.5rem)] flex-col sm:-mx-6 sm:-my-8">
-      <div className="grid flex-1 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0">
+    <div className="-mx-4 -my-6 flex min-h-[calc(100vh-3.5rem)] flex-col sm:-mx-6 sm:-my-8 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:overflow-hidden">
+      <div
+        className={cn(
+          "grid flex-1 lg:min-h-0",
+          sidebarOpen
+            ? "lg:grid-cols-[minmax(0,1fr)_320px]"
+            : "lg:grid-cols-[minmax(0,1fr)_40px]"
+        )}
+      >
+        <div className="flex min-w-0 flex-col lg:min-h-0">
         <Tabs
           value={tab}
           onValueChange={(v) => setTab(v as typeof tab)}
-          className="min-w-0"
+          className="flex min-w-0 flex-1 flex-col lg:min-h-0"
         >
           <div className="relative">
             <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b-2 border-border/60 bg-transparent px-4 py-0 shadow-none sm:px-6">
@@ -966,7 +1048,10 @@ export default function ProjectDetailPage() {
             </TabsList>
           </div>
 
-          <TabsContent value="overview" className="mt-2">
+          <TabsContent
+            value="overview"
+            className="mt-2 flex-1 lg:min-h-0 lg:overflow-y-auto"
+          >
             <div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/40 px-4 pb-2 text-sm sm:px-6">
                 <span>
@@ -1084,9 +1169,12 @@ export default function ProjectDetailPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="tasks" className="mt-2">
-            <div>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
+          <TabsContent
+            value="tasks"
+            className="mt-2 flex flex-1 flex-col lg:min-h-0"
+          >
+            <div className="flex flex-1 flex-col lg:min-h-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-4 py-2 sm:px-6 shrink-0">
           <div className="flex items-center gap-2">
             <ListChecks className="size-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Tasks</h2>
@@ -1127,6 +1215,99 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
+        {tasks.length > 0 && !tasksLoading ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
+            <InputGroup className="h-8 w-full shadow-none sm:w-64">
+              <InputGroupAddon>
+                <Search className="size-3.5 text-muted-foreground" />
+              </InputGroupAddon>
+              <InputGroupInput
+                placeholder="Search title"
+                value={taskQuery}
+                onChange={(e) => setTaskQuery(e.target.value)}
+              />
+            </InputGroup>
+            <Select
+              value={taskStatusFilter}
+              onValueChange={(v) =>
+                setTaskStatusFilter(v as "all" | TaskStatusKey)
+              }
+            >
+              <SelectTrigger size="sm" className="h-8 w-36 shadow-none">
+                <SelectValue placeholder="All status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All status</SelectItem>
+                {BOARD_COLUMNS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          TASK_STATUS_STYLES[s].dot
+                        )}
+                      />
+                      {TASK_STATUS_STYLES[s].label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={taskPriorityFilter}
+              onValueChange={(v) =>
+                setTaskPriorityFilter(v as "all" | TaskPriorityKey)
+              }
+            >
+              <SelectTrigger size="sm" className="h-8 w-36 shadow-none">
+                <SelectValue placeholder="All priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All priority</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={taskAssigneeFilter}
+              onValueChange={setTaskAssigneeFilter}
+            >
+              <SelectTrigger size="sm" className="h-8 w-44 shadow-none">
+                <SelectValue placeholder="All assignees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All assignees</SelectItem>
+                <SelectItem value="__unassigned">Unassigned</SelectItem>
+                {project.assignees.map((u) => (
+                  <SelectItem key={u._id} value={u._id}>
+                    {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasTaskFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setTaskQuery("");
+                  setTaskStatusFilter("all");
+                  setTaskPriorityFilter("all");
+                  setTaskAssigneeFilter("all");
+                }}
+                className="h-8 text-muted-foreground hover:text-foreground"
+              >
+                <X className="mr-1 size-3.5" /> Clear
+              </Button>
+            )}
+            <span className="ml-auto text-[11px] text-muted-foreground">
+              {filteredTasks.length} of {tasks.length}
+            </span>
+          </div>
+        ) : null}
+
         {tasksLoading ? (
           view === "board" ? (
             <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-3 xl:grid-cols-6">
@@ -1152,11 +1333,19 @@ export default function ProjectDetailPage() {
               Create the first task to start tracking work.
             </p>
           </div>
+        ) : filteredTasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-1 p-8 text-center">
+            <ListChecks className="size-5 text-muted-foreground" />
+            <p className="text-sm font-medium">No tasks match filters</p>
+            <p className="text-xs text-muted-foreground">
+              Try clearing filters or adjusting search.
+            </p>
+          </div>
         ) : view === "board" ? (
-          <div className="overflow-x-auto">
-            <div className="flex gap-3 px-4 py-2 min-w-max sm:px-6">
+          <div className="overflow-x-auto lg:flex-1 lg:min-h-0">
+            <div className="flex gap-3 px-4 py-2 min-w-max sm:px-6 lg:h-full">
               {BOARD_COLUMNS.map((col) => {
-                const colTasks = tasks.filter((t) => t.status === col);
+                const colTasks = filteredTasks.filter((t) => t.status === col);
                 const style = TASK_STATUS_STYLES[col];
                 const isOver = dragOverCol === col;
                 return (
@@ -1176,11 +1365,11 @@ export default function ProjectDetailPage() {
                       setDragOverCol(null);
                     }}
                     className={cn(
-                      "flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30",
+                      "flex w-72 shrink-0 flex-col overflow-hidden rounded-lg border bg-muted/30 lg:h-full",
                       isOver && "ring-2 ring-primary/40"
                     )}
                   >
-                    <div className="flex items-center justify-between gap-2 border-b border-border/40 px-2.5 py-1.5">
+                    <div className="flex items-center justify-between gap-2 border-b border-border/40 px-2.5 py-1.5 shrink-0">
                       <div className="flex items-center gap-1.5">
                         <span
                           className={cn("size-2 rounded-full", style.dot)}
@@ -1193,7 +1382,7 @@ export default function ProjectDetailPage() {
                         {colTasks.length}
                       </span>
                     </div>
-                    <div className="flex flex-col gap-1.5 p-1.5">
+                    <div className="flex flex-col gap-1.5 p-1.5 overflow-y-auto min-h-0 flex-1">
                       {colTasks.length === 0 ? (
                         <div className="rounded-md border border-dashed py-4 text-center text-xs text-muted-foreground">
                           Drop tasks here
@@ -1226,7 +1415,8 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
+            <div className="hidden md:block md:flex-1 md:overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-border/40 bg-muted/40 hover:bg-muted/40">
@@ -1239,10 +1429,11 @@ export default function ProjectDetailPage() {
                   <TableHead className="h-8 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assignees</TableHead>
                   <TableHead className="h-8 w-40 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Reporting</TableHead>
                   <TableHead className="h-8 w-36 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created by</TableHead>
+                  <TableHead className="h-8 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tasks
+                {filteredTasks
                   .slice(
                     (listPage - 1) * LIST_PAGE_SIZE,
                     listPage * LIST_PAGE_SIZE
@@ -1361,16 +1552,64 @@ export default function ProjectDetailPage() {
                     <TableCell className="px-3 py-1.5 text-sm text-muted-foreground">
                       {t.createdBy?.name ?? "—"}
                     </TableCell>
+                    <TableCell className="px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                      {formatShortDate(t.createdAt)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-            {tasks.length > LIST_PAGE_SIZE && (
-              <div className="flex items-center justify-between gap-3 border-t border-border/40 px-4 py-3 sm:px-6">
+            </div>
+
+            <ul className="divide-y divide-border/40 md:hidden">
+              {filteredTasks
+                .slice(
+                  (listPage - 1) * LIST_PAGE_SIZE,
+                  listPage * LIST_PAGE_SIZE
+                )
+                .map((t) => (
+                  <li
+                    key={t._id}
+                    className={cn("p-3", STATUS_ROW_BG[t.status])}
+                    onClick={() => openTaskTab(t._id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                          {t.taskId ? (
+                            <span className="font-mono">{t.taskId}</span>
+                          ) : null}
+                          <PriorityBadge priority={t.priority} />
+                        </div>
+                        <div className="truncate text-sm font-medium">
+                          {t.title}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                          <TaskStatusBadge status={t.status} />
+                          {t.dueDate ? (
+                            <DueDateCell due={t.dueDate} status={t.status} />
+                          ) : null}
+                          <span>{formatShortDate(t.createdAt)}</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        <AssigneeBadges
+                          users={t.assignees}
+                          max={3}
+                          size="sm"
+                        />
+                      </div>
+                    </div>
+                  </li>
+                ))}
+            </ul>
+
+            {filteredTasks.length > LIST_PAGE_SIZE && (
+              <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/40 px-4 py-3 sm:px-6">
                 <span className="text-xs text-muted-foreground">
                   Showing {(listPage - 1) * LIST_PAGE_SIZE + 1}-
-                  {Math.min(listPage * LIST_PAGE_SIZE, tasks.length)} of{" "}
-                  {tasks.length}
+                  {Math.min(listPage * LIST_PAGE_SIZE, filteredTasks.length)} of{" "}
+                  {filteredTasks.length}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -1384,7 +1623,7 @@ export default function ProjectDetailPage() {
                   </Button>
                   <span className="text-xs text-muted-foreground">
                     Page {listPage} /{" "}
-                    {Math.max(1, Math.ceil(tasks.length / LIST_PAGE_SIZE))}
+                    {Math.max(1, Math.ceil(filteredTasks.length / LIST_PAGE_SIZE))}
                   </span>
                   <Button
                     type="button"
@@ -1393,13 +1632,13 @@ export default function ProjectDetailPage() {
                     onClick={() =>
                       setListPage((p) =>
                         Math.min(
-                          Math.ceil(tasks.length / LIST_PAGE_SIZE),
+                          Math.ceil(filteredTasks.length / LIST_PAGE_SIZE),
                           p + 1
                         )
                       )
                     }
                     disabled={
-                      listPage >= Math.ceil(tasks.length / LIST_PAGE_SIZE)
+                      listPage >= Math.ceil(filteredTasks.length / LIST_PAGE_SIZE)
                     }
                   >
                     Next
@@ -1419,7 +1658,7 @@ export default function ProjectDetailPage() {
               <TabsContent
                 key={t._id}
                 value={`task:${t._id}`}
-                className="mt-2"
+                className="mt-2 flex-1 lg:min-h-0 lg:overflow-y-auto"
               >
                 <div>
                   <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
@@ -1642,8 +1881,33 @@ export default function ProjectDetailPage() {
         </Tabs>
         </div>
 
-        <aside className="border-border/40 lg:border-l">
-          <div className="divide-y divide-border/40 text-sm">
+        <aside className="relative flex flex-col border-border/40 lg:border-l">
+          <div
+            className={cn(
+              "hidden h-10 shrink-0 items-center border-b border-border/40 px-2 lg:flex",
+              sidebarOpen ? "justify-end" : "justify-center"
+            )}
+          >
+            <button
+              type="button"
+              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              {sidebarOpen ? (
+                <PanelRightClose className="size-4" />
+              ) : (
+                <PanelRightOpen className="size-4" />
+              )}
+            </button>
+          </div>
+          <div
+            className={cn(
+              "divide-y divide-border/40 text-sm",
+              !sidebarOpen && "lg:hidden"
+            )}
+          >
             <SidebarRow label="Project">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                 <span>
@@ -1816,6 +2080,7 @@ export default function ProjectDetailPage() {
                   selected={taskAssignees}
                   onChange={setTaskAssignees}
                   placeholder="Select assignees"
+                  excludeIds={taskReporting.map((u) => u._id)}
                 />
                 <FieldError message={taskErrors.assignees} />
               </div>
@@ -1826,6 +2091,7 @@ export default function ProjectDetailPage() {
                   selected={taskReporting}
                   onChange={setTaskReporting}
                   placeholder="Select reporting persons"
+                  excludeIds={taskAssignees.map((u) => u._id)}
                 />
                 <FieldError message={taskErrors.reportingPersons} />
               </div>
@@ -2850,11 +3116,13 @@ function ProjectUserPicker({
   selected,
   onChange,
   placeholder = "Select people",
+  excludeIds,
 }: {
   options: UserLite[];
   selected: UserLite[];
   onChange: (list: UserLite[]) => void;
   placeholder?: string;
+  excludeIds?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -2864,9 +3132,13 @@ function ProjectUserPicker({
   }, [open]);
 
   const filtered = (() => {
+    const exclude = new Set(excludeIds ?? []);
+    const base = exclude.size
+      ? options.filter((u) => !exclude.has(u._id))
+      : options;
     const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter(
+    if (!q) return base;
+    return base.filter(
       (u) =>
         u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
     );
