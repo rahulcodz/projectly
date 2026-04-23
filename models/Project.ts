@@ -9,6 +9,7 @@ const ProjectSchema = new Schema(
       index: true,
     },
     name: { type: String, required: true, trim: true },
+    description: { type: String, default: "" },
     status: {
       type: String,
       enum: ["active", "inactive"],

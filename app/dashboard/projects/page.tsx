@@ -76,6 +76,7 @@ import {
   UserInitialsAvatar,
 } from "@/components/role-status-badge";
 import { FieldError, FormAlert, RequiredMark } from "@/components/form-error";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import { cn } from "@/lib/utils";
 import { type UserRole } from "@/lib/roles";
 import { type FieldErrors, parseApiError } from "@/lib/form-errors";
@@ -91,6 +92,7 @@ type Project = {
   _id: string;
   projectId: string;
   name: string;
+  description?: string;
   status: "active" | "inactive";
   createdBy: UserLite | null;
   reportingTo: UserLite[];
@@ -114,6 +116,7 @@ const controlClasses =
 
 const emptyForm = {
   name: "",
+  description: "",
   status: "active" as "active" | "inactive",
   reportingTo: [] as string[],
   assignees: [] as string[],
@@ -255,6 +258,7 @@ export default function ProjectsPage() {
     setNextId(p.projectId);
     setForm({
       name: p.name,
+      description: p.description ?? "",
       status: p.status,
       reportingTo: rtList.map((u) => u._id),
       assignees: (p.assignees ?? []).map((a) => a._id),
@@ -666,6 +670,17 @@ export default function ProjectsPage() {
                   />
                   <FieldError reserve message={formErrors.name} />
                 </div>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label>Description</Label>
+                <RichTextEditor
+                  value={form.description}
+                  onChange={(v) => setForm({ ...form, description: v })}
+                  placeholder="Short overview — goals, scope, links…"
+                  minHeight="min-h-24"
+                />
+                <FieldError reserve message="" />
               </div>
 
               <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">

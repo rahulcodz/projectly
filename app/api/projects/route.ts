@@ -9,6 +9,7 @@ import Project from "@/models/Project";
 import { nextSeq, peekSeq } from "@/models/Counter";
 import { getSession } from "@/lib/auth";
 import { fieldError, validationResponse } from "@/lib/api-errors";
+import { sanitizeRichHtml } from "@/lib/sanitize";
 import {
   getAppUrl,
   sendProjectAssignedEmail,
@@ -16,6 +17,7 @@ import {
 
 const createSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters"),
+  description: z.string().optional(),
   status: z.enum(["active", "inactive"]).default("active"),
   reportingTo: z
     .array(z.string())
@@ -135,6 +137,7 @@ export async function POST(req: NextRequest) {
     const created = await Project.create({
       projectId,
       name: parsed.data.name,
+      description: sanitizeRichHtml(parsed.data.description ?? ""),
       status: parsed.data.status,
       createdBy: new mongoose.Types.ObjectId(session.sub),
       reportingTo: parsed.data.reportingTo.map(

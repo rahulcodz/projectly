@@ -131,6 +131,7 @@ type Project = {
   _id: string;
   projectId: string;
   name: string;
+  description?: string;
   status: "active" | "inactive";
   createdBy: UserLite | null;
   reportingTo: UserLite[];
@@ -1180,53 +1181,6 @@ export default function ProjectDetailPage() {
                 </span>
               </div>
 
-              <div className="border-b border-border/40 px-4 py-2 sm:px-6">
-                {!projComposerOpen ? (
-                  <button
-                    type="button"
-                    onClick={() => setProjComposerOpen(true)}
-                    className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  >
-                    <MessageSquare className="size-3.5 text-muted-foreground" />
-                    Comment...
-                  </button>
-                ) : (
-                  <form onSubmit={postProjComment} className="space-y-3">
-                    <FormAlert message={commentAlert} />
-                    <RichTextEditor
-                      value={newProjComment}
-                      onChange={(v) => {
-                        setNewProjComment(v);
-                        if (commentAlert) setCommentAlert(null);
-                      }}
-                      placeholder="Share an update — @mention people, #link tasks, paste URLs…"
-                      minHeight="min-h-24"
-                      mentionUsers={projectMembers}
-                      hashTasks={hashTasks}
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setNewProjComment("");
-                          setCommentAlert(null);
-                          setProjComposerOpen(false);
-                        }}
-                        disabled={postingComment}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" disabled={postingComment} size="sm">
-                        <Send className="mr-2 size-4" />
-                        {postingComment ? "Posting…" : "Post to project"}
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
-
               {projCommentsLoading ? (
                 <div className="space-y-3 p-3 sm:px-6">
                   {Array.from({ length: 2 }).map((_, i) => (
@@ -1239,46 +1193,136 @@ export default function ProjectDetailPage() {
                     </div>
                   ))}
                 </div>
-              ) : projComments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
-                  <MessageSquare className="size-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">No posts yet</p>
-                  <p className="text-xs text-muted-foreground">
-                    Share updates, context, or questions for the whole project.
-                  </p>
-                </div>
               ) : (
-                <ul className="divide-y divide-border/40">
-                  {[...projComments]
-                    .sort(
-                      (a, b) =>
-                        new Date(b.createdAt ?? 0).getTime() -
-                        new Date(a.createdAt ?? 0).getTime()
-                    )
-                    .map((c) => (
-                      <li key={c._id} className="flex items-start gap-2 px-4 py-1.5 sm:px-6">
-                        <UserInitialsAvatar
-                          name={c.author?.name ?? "?"}
-                          role={c.author?.role}
-                          className="size-6 text-[9px]"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">
-                              {c.author?.name ?? "Unknown"}
-                            </span>
-                            {c.author?.role && (
-                              <RoleBadge role={c.author.role} />
-                            )}
-                            <span>· {formatDate(c.createdAt)}</span>
-                          </div>
-                          <div className="mt-1">
-                            <RichTextViewer html={c.body} />
-                          </div>
+                (() => {
+                  const sorted = [...projComments].sort(
+                    (a, b) =>
+                      new Date(b.createdAt ?? 0).getTime() -
+                      new Date(a.createdAt ?? 0).getTime()
+                  );
+                  const hasDesc =
+                    !!project.description && project.description.trim() !== "";
+                  const renderComment = (c: (typeof sorted)[number]) => (
+                    <li
+                      key={c._id}
+                      className="flex items-start gap-2 px-4 py-2 sm:px-6"
+                    >
+                      <UserInitialsAvatar
+                        name={c.author?.name ?? "?"}
+                        role={c.author?.role}
+                        className="size-6 text-[9px]"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            {c.author?.name ?? "Unknown"}
+                          </span>
+                          {c.author?.role && (
+                            <RoleBadge role={c.author.role} />
+                          )}
+                          <span>· {formatDate(c.createdAt)}</span>
                         </div>
-                      </li>
-                    ))}
-                </ul>
+                        <div className="mt-1">
+                          <RichTextViewer html={c.body} />
+                        </div>
+                      </div>
+                    </li>
+                  );
+
+                  return (
+                    <ul className="divide-y divide-border/40">
+                      {hasDesc && (
+                        <li className="flex items-start gap-2 bg-primary/5 px-4 py-2 sm:px-6">
+                          <UserInitialsAvatar
+                            name={project.createdBy?.name ?? "P"}
+                            role={project.createdBy?.role}
+                            className="size-6 text-[9px]"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">
+                                {project.createdBy?.name ?? "Project"}
+                              </span>
+                              {project.createdBy?.role && (
+                                <RoleBadge role={project.createdBy.role} />
+                              )}
+                              <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                                Description
+                              </span>
+                              <span>· {formatDate(project.createdAt)}</span>
+                            </div>
+                            <div className="mt-1">
+                              <RichTextViewer html={project.description ?? ""} />
+                            </div>
+                          </div>
+                        </li>
+                      )}
+
+                      <li className="px-4 py-2 sm:px-6">
+                    {!projComposerOpen ? (
+                      <button
+                        type="button"
+                        onClick={() => setProjComposerOpen(true)}
+                        className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      >
+                        <MessageSquare className="size-3.5 text-muted-foreground" />
+                        Comment...
+                      </button>
+                    ) : (
+                      <form onSubmit={postProjComment} className="space-y-3">
+                        <FormAlert message={commentAlert} />
+                        <RichTextEditor
+                          value={newProjComment}
+                          onChange={(v) => {
+                            setNewProjComment(v);
+                            if (commentAlert) setCommentAlert(null);
+                          }}
+                          placeholder="Share an update — @mention people, #link tasks, paste URLs…"
+                          minHeight="min-h-24"
+                          mentionUsers={projectMembers}
+                          hashTasks={hashTasks}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setNewProjComment("");
+                              setCommentAlert(null);
+                              setProjComposerOpen(false);
+                            }}
+                            disabled={postingComment}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={postingComment}
+                            size="sm"
+                          >
+                            <Send className="mr-2 size-4" />
+                            {postingComment ? "Posting…" : "Post to project"}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </li>
+
+                      {sorted.length === 0 && !hasDesc ? (
+                        <li className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
+                          <MessageSquare className="size-4 text-muted-foreground" />
+                          <p className="text-sm font-medium">No posts yet</p>
+                          <p className="text-xs text-muted-foreground">
+                            Share updates, context, or questions for the whole project.
+                          </p>
+                        </li>
+                      ) : (
+                        sorted.map((c) => renderComment(c))
+                      )}
+                    </ul>
+                  );
+                })()
               )}
             </div>
           </TabsContent>

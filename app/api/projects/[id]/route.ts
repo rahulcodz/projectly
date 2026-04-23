@@ -9,6 +9,7 @@ import Project from "@/models/Project";
 import User from "@/models/User";
 import { getSession } from "@/lib/auth";
 import { fieldError, validationResponse } from "@/lib/api-errors";
+import { sanitizeRichHtml } from "@/lib/sanitize";
 import {
   getAppUrl,
   sendProjectAssignedEmail,
@@ -17,6 +18,7 @@ import {
 
 const updateSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters").optional(),
+  description: z.string().optional(),
   status: z.enum(["active", "inactive"]).optional(),
   reportingTo: z.array(z.string()).min(1).optional(),
   assignees: z.array(z.string()).optional(),
@@ -117,6 +119,8 @@ export async function PATCH(
 
     const update: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) update.name = parsed.data.name;
+    if (parsed.data.description !== undefined)
+      update.description = sanitizeRichHtml(parsed.data.description);
     if (parsed.data.status !== undefined) update.status = parsed.data.status;
     if (parsed.data.reportingTo !== undefined)
       update.reportingTo = parsed.data.reportingTo.map(
