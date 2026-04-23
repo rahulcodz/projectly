@@ -1010,7 +1010,15 @@ export default function ProjectDetailPage() {
           className="flex min-w-0 flex-1 flex-col lg:min-h-0"
         >
           <div className="relative">
-            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b-2 border-border/60 bg-transparent px-4 py-0 shadow-none sm:px-6">
+            <TabsList className="h-auto w-full flex-wrap justify-start gap-1 rounded-none border-b-2 border-border/60 bg-transparent px-2 py-0 shadow-none sm:px-3">
+              <button
+                type="button"
+                aria-label="Back to projects"
+                onClick={() => router.push("/dashboard/projects")}
+                className="mr-1 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
               <TabsTrigger
                 value="overview"
                 className={cn(chromeTabClasses, "bg-primary/10 data-[state=active]:bg-primary/15")}
@@ -1195,7 +1203,7 @@ export default function ProjectDetailPage() {
                   <button
                     type="button"
                     onClick={() => setProjComposerOpen(true)}
-                    className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-1 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
                   >
                     <MessageSquare className="size-3.5 text-muted-foreground" />
                     Post an update, question, or note for everyone…
@@ -2011,7 +2019,7 @@ export default function ProjectDetailPage() {
                         onClick={() =>
                           updateTaskTab(t._id, { composerOpen: true })
                         }
-                        className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-1 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       >
                         <MessageSquare className="size-3.5 text-muted-foreground" />
                         Reply to this task…
@@ -2236,40 +2244,96 @@ export default function ProjectDetailPage() {
 
 function renderSubtaskTitle(
   title: string,
-  hashTasks: HashTask[] | undefined
+  hashTasks: HashTask[] | undefined,
+  mentionUsers:
+    | { _id: string; name: string; email?: string; role?: UserRole }[]
+    | undefined
 ) {
-  if (!hashTasks || hashTasks.length === 0) return title;
-  const byTaskId = new Map(hashTasks.map((t) => [t.taskId, t]));
+  const byTaskId = new Map((hashTasks ?? []).map((t) => [t.taskId, t]));
+  const nameToUser = new Map(
+    (mentionUsers ?? []).map((u) => [u.name, u])
+  );
+  const sortedNames = (mentionUsers ?? [])
+    .map((u) => u.name)
+    .sort((a, b) => b.length - a.length);
+
+  const hashChipCls =
+    "inline-block rounded-sm bg-primary/15 px-1.5 font-mono text-[0.75rem] text-primary no-underline hover:underline whitespace-nowrap";
+  const mentionChipCls =
+    "inline-block rounded-sm bg-primary/15 px-1.5 text-[0.8125rem] font-medium text-primary whitespace-nowrap";
+
   const parts: ReactNode[] = [];
-  const re = /#([A-Za-z0-9_-]+)/g;
-  let last = 0;
-  let match: RegExpExecArray | null;
+  let i = 0;
   let key = 0;
-  while ((match = re.exec(title)) !== null) {
-    if (match.index > last) parts.push(title.slice(last, match.index));
-    const ref = byTaskId.get(match[1]);
-    if (ref) {
-      parts.push(
-        <a
-          key={key++}
-          href={`/dashboard/projects/${ref.projectId}?task=${ref.id}`}
-          className="task-ref"
-          data-type="hashtag"
-          data-id={ref.id}
-          data-label={ref.taskId}
-          data-project-id={ref.projectId}
-          onClick={(e) => e.stopPropagation()}
-        >
-          #{ref.taskId}
-        </a>
-      );
-    } else {
-      parts.push(match[0]);
+  let buf = "";
+  const flush = () => {
+    if (buf) {
+      parts.push(buf);
+      buf = "";
     }
-    last = match.index + match[0].length;
+  };
+
+  while (i < title.length) {
+    const ch = title[i];
+    const prev = i === 0 ? " " : title[i - 1];
+    const atBoundary = /\s/.test(prev) || i === 0;
+
+    if (ch === "#" && atBoundary) {
+      const rest = title.slice(i + 1);
+      const m = /^([A-Za-z0-9_-]+)/.exec(rest);
+      if (m) {
+        const ref = byTaskId.get(m[1]);
+        flush();
+        if (ref) {
+          parts.push(
+            <a
+              key={key++}
+              href={`/dashboard/projects/${ref.projectId}?task=${ref._id}`}
+              className={hashChipCls}
+              data-type="hashtag"
+              data-id={ref._id}
+              data-label={ref.taskId}
+              data-project-id={ref.projectId}
+              onClick={(e) => e.stopPropagation()}
+            >
+              #{ref.taskId}
+            </a>
+          );
+        } else {
+          parts.push(`#${m[1]}`);
+        }
+        i += 1 + m[1].length;
+        continue;
+      }
+    }
+
+    if (ch === "@" && atBoundary) {
+      const rest = title.slice(i + 1);
+      const matched = sortedNames.find((n) => rest.startsWith(n));
+      if (matched) {
+        const user = nameToUser.get(matched);
+        flush();
+        parts.push(
+          <span
+            key={key++}
+            className={mentionChipCls}
+            data-type="mention"
+            data-id={user?._id}
+            data-label={matched}
+          >
+            @{matched}
+          </span>
+        );
+        i += 1 + matched.length;
+        continue;
+      }
+    }
+
+    buf += ch;
+    i += 1;
   }
-  if (last < title.length) parts.push(title.slice(last));
-  return parts;
+  flush();
+  return parts.length > 0 ? parts : title;
 }
 
 function SubtaskPanel({
@@ -2412,14 +2476,14 @@ function SubtaskPanel({
             return (
               <li
                 key={s._id}
-                className="group flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-muted/40"
+                className="group flex items-start gap-2 rounded-md px-1 py-0.5 hover:bg-muted/40"
               >
                 <input
                   type="checkbox"
                   checked={s.completed}
                   onChange={() => toggle(s._id)}
                   disabled={isEditing}
-                  className="size-4 accent-primary"
+                  className="mt-0.5 size-4 shrink-0 accent-primary"
                 />
                 {isEditing ? (
                   <form
@@ -2461,17 +2525,17 @@ function SubtaskPanel({
                   <>
                     <span
                       className={cn(
-                        "flex-1 text-sm",
+                        "min-w-0 flex-1 break-words text-sm leading-5",
                         s.completed && "text-muted-foreground line-through"
                       )}
                     >
-                      {renderSubtaskTitle(s.title, hashTasks)}
+                      {renderSubtaskTitle(s.title, hashTasks, mentionUsers)}
                     </span>
                     <button
                       type="button"
                       onClick={() => startEdit(s)}
                       aria-label="Edit subtask"
-                      className="opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
+                      className="mt-0.5 shrink-0 opacity-0 transition-opacity hover:text-primary group-hover:opacity-100"
                     >
                       <Pencil className="size-3.5" />
                     </button>
@@ -2479,7 +2543,7 @@ function SubtaskPanel({
                       type="button"
                       onClick={() => setPendingRemove(s)}
                       aria-label="Remove subtask"
-                      className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                      className="mt-0.5 shrink-0 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                     >
                       <X className="size-3.5" />
                     </button>
