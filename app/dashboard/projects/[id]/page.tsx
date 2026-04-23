@@ -133,7 +133,7 @@ type Project = {
   name: string;
   status: "active" | "inactive";
   createdBy: UserLite | null;
-  reportingTo: UserLite | null;
+  reportingTo: UserLite[];
   assignees: UserLite[];
   createdAt?: string;
   updatedAt?: string;
@@ -310,6 +310,18 @@ export default function ProjectDetailPage() {
     body: string;
     createdAt?: string;
     author: UserLite | null;
+    kind?: "comment" | "system";
+    system?: {
+      type:
+        | "status"
+        | "priority"
+        | "assignee_added"
+        | "assignee_removed"
+        | "reporting_added"
+        | "reporting_removed";
+      from?: string;
+      to?: string;
+    } | null;
   };
 
   const [projComments, setProjComments] = useState<CommentT[]>([]);
@@ -448,7 +460,7 @@ export default function ProjectDetailPage() {
       seen.add(u._id);
       list.push({ _id: u._id, name: u.name, email: u.email, role: u.role });
     };
-    push(project.reportingTo);
+    for (const u of project.reportingTo ?? []) push(u);
     push(project.createdBy);
     for (const a of project.assignees) push(a);
     return list;
@@ -472,6 +484,20 @@ export default function ProjectDetailPage() {
     },
     [projectMembers, tasks]
   );
+
+  const taskPickerOptions = useMemo<UserLite[]>(() => {
+    if (!project) return [];
+    const list: UserLite[] = [];
+    const seen = new Set<string>();
+    const push = (u: UserLite | null | undefined) => {
+      if (!u?._id || seen.has(u._id)) return;
+      seen.add(u._id);
+      list.push(u);
+    };
+    for (const u of project.reportingTo ?? []) push(u);
+    for (const a of project.assignees) push(a);
+    return list;
+  }, [project]);
 
   async function addAssignee(userId: string) {
     if (!project) return;
@@ -918,7 +944,7 @@ export default function ProjectDetailPage() {
     setTaskDesc("");
     setTaskStatus("todo");
     setTaskPriority("medium");
-    setTaskAssignedDate(null);
+    setTaskAssignedDate(new Date());
     setTaskDueDate(null);
     setTaskAssignees([]);
     setTaskReporting([]);
@@ -1110,8 +1136,12 @@ export default function ProjectDetailPage() {
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Reporting to
                   </span>
-                  {project.reportingTo ? (
-                    <MinimalPerson user={project.reportingTo} />
+                  {project.reportingTo && project.reportingTo.length > 0 ? (
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {project.reportingTo.map((u) => (
+                        <MinimalPerson key={u._id} user={u} />
+                      ))}
+                    </span>
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
@@ -1129,7 +1159,7 @@ export default function ProjectDetailPage() {
                     canEdit={canEdit}
                     existingIds={[
                       ...project.assignees.map((u) => u._id),
-                      ...(project.reportingTo ? [project.reportingTo._id] : []),
+                      ...(project.reportingTo ?? []).map((u) => u._id),
                     ]}
                     onAdd={addAssignee}
                     onRemove={removeAssignee}
@@ -1144,61 +1174,13 @@ export default function ProjectDetailPage() {
 
               <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
                 <MessageSquare className="size-3.5 text-muted-foreground" />
-                <h2 className="text-sm font-semibold">Project thread</h2>
+                <h2 className="text-sm font-semibold">Comments</h2>
                 <span className="rounded-full border bg-background px-1.5 py-0 text-[11px] font-medium text-muted-foreground">
                   {projCommentsLoading ? "…" : projComments.length}
                 </span>
               </div>
 
-              {projCommentsLoading ? (
-                <div className="space-y-3 p-3 sm:px-6">
-                  {Array.from({ length: 2 }).map((_, i) => (
-                    <div key={i} className="flex items-start gap-2.5">
-                      <Skeleton className="size-7 rounded-full" />
-                      <div className="flex-1 space-y-1.5">
-                        <Skeleton className="h-3 w-40" />
-                        <Skeleton className="h-3 w-full" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : projComments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
-                  <MessageSquare className="size-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">No posts yet</p>
-                  <p className="text-xs text-muted-foreground">
-                    Share updates, context, or questions for the whole project.
-                  </p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-border/40">
-                  {projComments.map((c) => (
-                    <li key={c._id} className="flex items-start gap-2 px-4 py-1.5 sm:px-6">
-                      <UserInitialsAvatar
-                        name={c.author?.name ?? "?"}
-                        role={c.author?.role}
-                        className="size-6 text-[9px]"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground">
-                            {c.author?.name ?? "Unknown"}
-                          </span>
-                          {c.author?.role && (
-                            <RoleBadge role={c.author.role} />
-                          )}
-                          <span>· {formatDate(c.createdAt)}</span>
-                        </div>
-                        <div className="mt-1">
-                          <RichTextViewer html={c.body} />
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <div className="border-t border-border/40 px-4 py-1.5 sm:px-6">
+              <div className="border-b border-border/40 px-4 py-2 sm:px-6">
                 {!projComposerOpen ? (
                   <button
                     type="button"
@@ -1206,7 +1188,7 @@ export default function ProjectDetailPage() {
                     className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
                   >
                     <MessageSquare className="size-3.5 text-muted-foreground" />
-                    Post an update, question, or note for everyone…
+                    Comment...
                   </button>
                 ) : (
                   <form onSubmit={postProjComment} className="space-y-3">
@@ -1244,6 +1226,60 @@ export default function ProjectDetailPage() {
                   </form>
                 )}
               </div>
+
+              {projCommentsLoading ? (
+                <div className="space-y-3 p-3 sm:px-6">
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="flex items-start gap-2.5">
+                      <Skeleton className="size-7 rounded-full" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-3 w-40" />
+                        <Skeleton className="h-3 w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : projComments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
+                  <MessageSquare className="size-4 text-muted-foreground" />
+                  <p className="text-sm font-medium">No posts yet</p>
+                  <p className="text-xs text-muted-foreground">
+                    Share updates, context, or questions for the whole project.
+                  </p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-border/40">
+                  {[...projComments]
+                    .sort(
+                      (a, b) =>
+                        new Date(b.createdAt ?? 0).getTime() -
+                        new Date(a.createdAt ?? 0).getTime()
+                    )
+                    .map((c) => (
+                      <li key={c._id} className="flex items-start gap-2 px-4 py-1.5 sm:px-6">
+                        <UserInitialsAvatar
+                          name={c.author?.name ?? "?"}
+                          role={c.author?.role}
+                          className="size-6 text-[9px]"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                              {c.author?.name ?? "Unknown"}
+                            </span>
+                            {c.author?.role && (
+                              <RoleBadge role={c.author.role} />
+                            )}
+                            <span>· {formatDate(c.createdAt)}</span>
+                          </div>
+                          <div className="mt-1">
+                            <RichTextViewer html={c.body} />
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+              )}
             </div>
           </TabsContent>
 
@@ -1287,9 +1323,11 @@ export default function ProjectDetailPage() {
                 <ListIcon className="size-3.5" /> List
               </button>
             </div>
-            <Button size="sm" onClick={openCreateTask}>
-              <Plus className="mr-2 size-4" /> Add task
-            </Button>
+            {canEdit && (
+              <Button size="sm" onClick={openCreateTask}>
+                <Plus className="mr-2 size-4" /> Add task
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1964,55 +2002,14 @@ export default function ProjectDetailPage() {
                     }
                   />
 
-                  {state.loading ? (
-                    <div className="space-y-3 p-3 sm:px-6">
-                      {Array.from({ length: 2 }).map((_, i) => (
-                        <div key={i} className="flex items-start gap-2.5">
-                          <Skeleton className="size-7 rounded-full" />
-                          <div className="flex-1 space-y-1.5">
-                            <Skeleton className="h-3 w-40" />
-                            <Skeleton className="h-3 w-full" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : state.comments.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
-                      <MessageSquare className="size-4 text-muted-foreground" />
-                      <p className="text-sm font-medium">No comments yet</p>
-                      <p className="text-xs text-muted-foreground">
-                        Start the task discussion below.
-                      </p>
-                    </div>
-                  ) : (
-                    <ul className="divide-y divide-border/40">
-                      {state.comments.map((c) => (
-                        <li key={c._id} className="flex items-start gap-2 px-4 py-1.5 sm:px-6">
-                          <UserInitialsAvatar
-                            name={c.author?.name ?? "?"}
-                            role={c.author?.role}
-                            className="size-6 text-[9px]"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                              <span className="font-medium text-foreground">
-                                {c.author?.name ?? "Unknown"}
-                              </span>
-                              {c.author?.role && (
-                                <RoleBadge role={c.author.role} />
-                              )}
-                              <span>· {formatDate(c.createdAt)}</span>
-                            </div>
-                            <div className="mt-1">
-                              <RichTextViewer html={c.body} />
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <div className="flex items-center justify-between border-t border-border/40 px-4 pt-3 sm:px-6">
+                    <h3 className="text-sm font-semibold">Comments</h3>
+                    <span className="text-[11px] text-muted-foreground">
+                      {state.comments.length}
+                    </span>
+                  </div>
 
-                  <div className="border-t border-border/40 px-4 py-1.5 sm:px-6">
+                  <div className="border-b border-border/40 px-4 py-2 sm:px-6">
                     {!state.composerOpen ? (
                       <button
                         type="button"
@@ -2022,7 +2019,7 @@ export default function ProjectDetailPage() {
                         className="flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2.5 text-left text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground"
                       >
                         <MessageSquare className="size-3.5 text-muted-foreground" />
-                        Reply to this task…
+                        Comment...
                       </button>
                     ) : (
                       <form
@@ -2071,6 +2068,83 @@ export default function ProjectDetailPage() {
                       </form>
                     )}
                   </div>
+
+                  {state.loading ? (
+                    <div className="space-y-3 p-3 sm:px-6">
+                      {Array.from({ length: 2 }).map((_, i) => (
+                        <div key={i} className="flex items-start gap-2.5">
+                          <Skeleton className="size-7 rounded-full" />
+                          <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-3 w-40" />
+                            <Skeleton className="h-3 w-full" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : state.comments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
+                      <MessageSquare className="size-4 text-muted-foreground" />
+                      <p className="text-sm font-medium">No comments yet</p>
+                      <p className="text-xs text-muted-foreground">
+                        Be the first to reply.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-border/40">
+                      {[...state.comments]
+                        .sort(
+                          (a, b) =>
+                            new Date(b.createdAt ?? 0).getTime() -
+                            new Date(a.createdAt ?? 0).getTime()
+                        )
+                        .map((c) =>
+                          c.kind === "system" ? (
+                            <li
+                              key={c._id}
+                              className="flex items-center gap-2 px-4 py-1 text-[11px] text-muted-foreground sm:px-6"
+                            >
+                              <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] text-muted-foreground">
+                                •
+                              </span>
+                              <span>
+                                <span className="font-medium text-foreground">
+                                  {c.author?.name ?? "System"}
+                                </span>{" "}
+                                {c.body}{" "}
+                                <span className="text-muted-foreground">
+                                  · {formatDate(c.createdAt)}
+                                </span>
+                              </span>
+                            </li>
+                          ) : (
+                            <li
+                              key={c._id}
+                              className="flex items-start gap-2 px-4 py-1.5 sm:px-6"
+                            >
+                              <UserInitialsAvatar
+                                name={c.author?.name ?? "?"}
+                                role={c.author?.role}
+                                className="size-6 text-[9px]"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">
+                                    {c.author?.name ?? "Unknown"}
+                                  </span>
+                                  {c.author?.role && (
+                                    <RoleBadge role={c.author.role} />
+                                  )}
+                                  <span>· {formatDate(c.createdAt)}</span>
+                                </div>
+                                <div className="mt-1">
+                                  <RichTextViewer html={c.body} />
+                                </div>
+                              </div>
+                            </li>
+                          )
+                        )}
+                    </ul>
+                  )}
                 </div>
               </TabsContent>
             );
@@ -2079,7 +2153,10 @@ export default function ProjectDetailPage() {
         </div>
 
       <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent
+          className="sm:max-w-xl"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <form onSubmit={handleCreateTask} className="space-y-4">
             <DialogHeader>
               <DialogTitle>{taskEditId ? "Edit task" : "Add task"}</DialogTitle>
@@ -2190,22 +2267,20 @@ export default function ProjectDetailPage() {
               <div className="grid gap-1.5">
                 <Label>Assignees</Label>
                 <ProjectUserPicker
-                  options={project.assignees}
+                  options={taskPickerOptions}
                   selected={taskAssignees}
                   onChange={setTaskAssignees}
                   placeholder="Select assignees"
-                  excludeIds={taskReporting.map((u) => u._id)}
                 />
                 <FieldError message={taskErrors.assignees} />
               </div>
               <div className="grid gap-1.5">
                 <Label>Reporting persons</Label>
                 <ProjectUserPicker
-                  options={project.assignees}
+                  options={taskPickerOptions}
                   selected={taskReporting}
                   onChange={setTaskReporting}
                   placeholder="Select reporting persons"
-                  excludeIds={taskAssignees.map((u) => u._id)}
                 />
                 <FieldError message={taskErrors.reportingPersons} />
               </div>
@@ -3275,34 +3350,34 @@ function ProjectUserPicker({
   onChange,
   placeholder = "Select people",
   excludeIds,
+  excludeLabel = "Already selected",
 }: {
   options: UserLite[];
   selected: UserLite[];
   onChange: (list: UserLite[]) => void;
   placeholder?: string;
   excludeIds?: string[];
+  excludeLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const excludeSet = new Set(excludeIds ?? []);
 
   useEffect(() => {
     if (!open) setQuery("");
   }, [open]);
 
   const filtered = (() => {
-    const exclude = new Set(excludeIds ?? []);
-    const base = exclude.size
-      ? options.filter((u) => !exclude.has(u._id))
-      : options;
     const q = query.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter(
+    if (!q) return options;
+    return options.filter(
       (u) =>
         u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
     );
   })();
 
   function toggle(u: UserLite) {
+    if (excludeSet.has(u._id)) return;
     if (selected.some((s) => s._id === u._id)) {
       onChange(selected.filter((s) => s._id !== u._id));
     } else {
@@ -3379,14 +3454,18 @@ function ProjectUserPicker({
           ) : (
             filtered.map((u) => {
               const sel = selected.some((s) => s._id === u._id);
+              const excluded = excludeSet.has(u._id);
               return (
                 <button
                   type="button"
                   key={u._id}
                   onClick={() => toggle(u)}
+                  disabled={excluded}
+                  title={excluded ? excludeLabel : undefined}
                   className={cn(
                     "flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent",
-                    sel && "bg-primary/5"
+                    sel && "bg-primary/5",
+                    excluded && "cursor-not-allowed opacity-60 hover:bg-transparent"
                   )}
                 >
                   <span
@@ -3403,7 +3482,13 @@ function ProjectUserPicker({
                       {u.email}
                     </div>
                   </div>
-                  {sel && <X className="size-4 text-muted-foreground" />}
+                  {excluded ? (
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {excludeLabel}
+                    </span>
+                  ) : sel ? (
+                    <X className="size-4 text-muted-foreground" />
+                  ) : null}
                 </button>
               );
             })

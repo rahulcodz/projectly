@@ -18,7 +18,7 @@ import {
 const updateSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters").optional(),
   status: z.enum(["active", "inactive"]).optional(),
-  reportingTo: z.string().optional(),
+  reportingTo: z.array(z.string()).min(1).optional(),
   assignees: z.array(z.string()).optional(),
 });
 
@@ -52,14 +52,15 @@ export async function GET(
       const assigneeIds = (project.assignees ?? []).map((a) =>
         String((a as unknown as { _id: unknown })._id ?? a)
       );
-      const reportingToId = project.reportingTo
-        ? String(
-            (project.reportingTo as unknown as { _id: unknown })._id ??
-              project.reportingTo
+      const reportingIds = Array.isArray(project.reportingTo)
+        ? project.reportingTo.map((r) =>
+            typeof r === "object" && r !== null && "_id" in r
+              ? String((r as { _id: unknown })._id)
+              : String(r)
           )
-        : null;
+        : [];
       const isAssignee = assigneeIds.includes(session.sub);
-      const isReportingTo = reportingToId === session.sub;
+      const isReportingTo = reportingIds.includes(session.sub);
       if (!isAssignee && !isReportingTo) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
@@ -94,8 +95,12 @@ export async function PATCH(
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) return validationResponse(parsed.error);
 
-    if (parsed.data.reportingTo && !isValidId(parsed.data.reportingTo)) {
-      return fieldError("reportingTo", "Invalid reporting person");
+    if (parsed.data.reportingTo) {
+      for (const id of parsed.data.reportingTo) {
+        if (!isValidId(id)) {
+          return fieldError("reportingTo", "Invalid reporting person");
+        }
+      }
     }
     if (parsed.data.assignees) {
       for (const a of parsed.data.assignees) {
@@ -114,7 +119,9 @@ export async function PATCH(
     if (parsed.data.name !== undefined) update.name = parsed.data.name;
     if (parsed.data.status !== undefined) update.status = parsed.data.status;
     if (parsed.data.reportingTo !== undefined)
-      update.reportingTo = new mongoose.Types.ObjectId(parsed.data.reportingTo);
+      update.reportingTo = parsed.data.reportingTo.map(
+        (x) => new mongoose.Types.ObjectId(x)
+      );
     if (parsed.data.assignees !== undefined)
       update.assignees = parsed.data.assignees.map(
         (x) => new mongoose.Types.ObjectId(x)
@@ -149,19 +156,34 @@ export async function PATCH(
           if (!nextAssignees.has(id)) removedAssignees.push(id);
       }
 
-      const prevRt = prev.reportingTo ? String(prev.reportingTo) : null;
-      const nextRt =
-        parsed.data.reportingTo !== undefined
-          ? parsed.data.reportingTo
-          : prevRt;
-      const rtAdded = nextRt && nextRt !== prevRt ? nextRt : null;
-      const rtRemoved = prevRt && prevRt !== nextRt ? prevRt : null;
+      const prevRtIds = new Set(
+        (Array.isArray(prev.reportingTo)
+          ? prev.reportingTo
+          : prev.reportingTo
+          ? [prev.reportingTo]
+          : []
+        ).map((r) => String(r))
+      );
+      const nextRtArr = parsed.data.reportingTo ?? null;
+      const nextRtIds = nextRtArr ? new Set(nextRtArr) : prevRtIds;
+
+      const addedRt: string[] = [];
+      const removedRt: string[] = [];
+      if (nextRtArr) {
+        for (const id of nextRtIds)
+          if (!prevRtIds.has(id)) addedRt.push(id);
+        for (const id of prevRtIds)
+          if (!nextRtIds.has(id)) removedRt.push(id);
+      }
 
       const ids = Array.from(
         new Set(
-          [...addedAssignees, ...removedAssignees, rtAdded, rtRemoved].filter(
-            Boolean
-          ) as string[]
+          [
+            ...addedAssignees,
+            ...removedAssignees,
+            ...addedRt,
+            ...removedRt,
+          ].filter(Boolean) as string[]
         )
       );
 
@@ -213,35 +235,35 @@ export async function PATCH(
             })
           );
         }
-        if (rtAdded && rtAdded !== session.sub) {
-          const u = byId.get(rtAdded);
-          if (u) {
-            tasks.push(
-              sendProjectAssignedEmail({
-                to: u.email,
-                recipientName: u.name,
-                actorName,
-                project: projectMeta,
-                projectUrl,
-                role: "reportingTo",
-              })
-            );
-          }
+        for (const uid of addedRt) {
+          if (uid === session.sub) continue;
+          const u = byId.get(uid);
+          if (!u) continue;
+          tasks.push(
+            sendProjectAssignedEmail({
+              to: u.email,
+              recipientName: u.name,
+              actorName,
+              project: projectMeta,
+              projectUrl,
+              role: "reportingTo",
+            })
+          );
         }
-        if (rtRemoved && rtRemoved !== session.sub) {
-          const u = byId.get(rtRemoved);
-          if (u) {
-            tasks.push(
-              sendProjectUnassignedEmail({
-                to: u.email,
-                recipientName: u.name,
-                actorName,
-                project: projectMeta,
-                projectUrl,
-                role: "reportingTo",
-              })
-            );
-          }
+        for (const uid of removedRt) {
+          if (uid === session.sub) continue;
+          const u = byId.get(uid);
+          if (!u) continue;
+          tasks.push(
+            sendProjectUnassignedEmail({
+              to: u.email,
+              recipientName: u.name,
+              actorName,
+              project: projectMeta,
+              projectUrl,
+              role: "reportingTo",
+            })
+          );
         }
 
         Promise.allSettled(tasks).catch(() => {});

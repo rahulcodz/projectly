@@ -18,7 +18,8 @@
       "Bash(npx eslint *)",
       "Bash(git stash *)",
       "Bash(npx next *)",
-      "Bash(grep -n \"^    </div>$\" D:/workSpace/projectly/app/dashboard/projects/\\\\[id\\\\]/page.tsx)"
+      "Bash(grep -n \"^    </div>$\" D:/workSpace/projectly/app/dashboard/projects/\\\\[id\\\\]/page.tsx)",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

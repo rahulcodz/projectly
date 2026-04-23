@@ -137,7 +137,7 @@ export async function POST(
         const allowed = new Set<string>(
           (project.assignees ?? []).map((a) => String(a))
         );
-        if (project.reportingTo) allowed.add(String(project.reportingTo));
+        for (const r of project.reportingTo ?? []) allowed.add(String(r));
         if (project.createdBy) allowed.add(String(project.createdBy));
         const recipientIds = mentionIds.filter((mid) => allowed.has(mid));
         if (recipientIds.length > 0) {

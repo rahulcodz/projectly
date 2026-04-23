@@ -94,12 +94,16 @@ function UserSearchList({
   results,
   isSelected,
   onPick,
+  isExcluded,
+  excludeLabel,
 }: {
   loading: boolean;
   error: string | null;
   results: UserLite[];
   isSelected: (id: string) => boolean;
   onPick: (u: UserLite) => void;
+  isExcluded?: (id: string) => boolean;
+  excludeLabel?: string;
 }) {
   return (
     <div className="max-h-60 overflow-auto py-1">
@@ -124,14 +128,18 @@ function UserSearchList({
       ) : (
         results.map((u) => {
           const sel = isSelected(u._id);
+          const excluded = isExcluded?.(u._id) ?? false;
           return (
             <button
               type="button"
               key={u._id}
               onClick={() => onPick(u)}
+              disabled={excluded}
+              title={excluded ? excludeLabel : undefined}
               className={cn(
                 "flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent",
-                sel && "bg-primary/5"
+                sel && "bg-primary/5",
+                excluded && "cursor-not-allowed opacity-60 hover:bg-transparent"
               )}
             >
               <UserInitialsAvatar
@@ -145,12 +153,18 @@ function UserSearchList({
                   {u.email}
                 </div>
               </div>
-              <Check
-                className={cn(
-                  "size-4 text-primary",
-                  sel ? "opacity-100" : "opacity-0"
-                )}
-              />
+              {excluded ? (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {excludeLabel ?? "Unavailable"}
+                </span>
+              ) : (
+                <Check
+                  className={cn(
+                    "size-4 text-primary",
+                    sel ? "opacity-100" : "opacity-0"
+                  )}
+                />
+              )}
             </button>
           );
         })
@@ -239,20 +253,20 @@ export function UserMultiPicker({
   onChange,
   placeholder = "Select people",
   excludeIds,
+  excludeLabel = "Already selected",
 }: {
   selected: UserLite[];
   onChange: (list: UserLite[]) => void;
   placeholder?: string;
   excludeIds?: string[];
+  excludeLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const { query, setQuery, results, loading, error } = useUserSearch(open);
   const excludeSet = new Set(excludeIds ?? []);
-  const visibleResults = excludeSet.size
-    ? results.filter((u) => !excludeSet.has(u._id))
-    : results;
 
   function toggle(u: UserLite) {
+    if (excludeSet.has(u._id)) return;
     if (selected.some((s) => s._id === u._id)) {
       onChange(selected.filter((s) => s._id !== u._id));
     } else {
@@ -322,8 +336,10 @@ export function UserMultiPicker({
         <UserSearchList
           loading={loading}
           error={error}
-          results={visibleResults}
+          results={results}
           isSelected={(id) => selected.some((s) => s._id === id)}
+          isExcluded={(id) => excludeSet.has(id)}
+          excludeLabel={excludeLabel}
           onPick={(u) => toggle(u)}
         />
       </PopoverContent>

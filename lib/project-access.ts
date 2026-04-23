@@ -17,7 +17,7 @@ export async function getProjectForSession(
   const userId = session.sub;
   const assignees = (project.assignees ?? []).map((a) => String(a));
   if (assignees.includes(userId)) return project;
-  if (project.reportingTo && String(project.reportingTo) === userId) {
+  if ((project.reportingTo ?? []).some((r) => String(r) === userId)) {
     return project;
   }
 

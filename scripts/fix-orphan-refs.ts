@@ -51,7 +51,23 @@ async function main() {
   for (const p of projects) {
     const update: Record<string, unknown> = {};
     if (isOrphan(p.createdBy)) update.createdBy = adminId;
-    if (isOrphan(p.reportingTo)) update.reportingTo = adminId;
+    const prevReporting = Array.isArray(p.reportingTo)
+      ? p.reportingTo
+      : p.reportingTo
+      ? [p.reportingTo]
+      : [];
+    const cleanedReporting = prevReporting.filter((r) => !isOrphan(r));
+    const nextReporting =
+      cleanedReporting.length > 0 ? cleanedReporting : [adminId];
+    const prevReportingKey = JSON.stringify(
+      prevReporting.map((r) => String(r))
+    );
+    const nextReportingKey = JSON.stringify(
+      nextReporting.map((r) => String(r))
+    );
+    if (prevReportingKey !== nextReportingKey) {
+      update.reportingTo = nextReporting;
+    }
     const assignees = (p.assignees ?? []).map((a) =>
       isOrphan(a) ? adminId : a
     );

@@ -93,7 +93,7 @@ type Project = {
   name: string;
   status: "active" | "inactive";
   createdBy: UserLite | null;
-  reportingTo: UserLite | null;
+  reportingTo: UserLite[];
   assignees: UserLite[];
   createdAt?: string;
 };
@@ -115,14 +115,14 @@ const controlClasses =
 const emptyForm = {
   name: "",
   status: "active" as "active" | "inactive",
-  reportingTo: "",
+  reportingTo: [] as string[],
   assignees: [] as string[],
 };
 
 export default function ProjectsPage() {
   const [session, setSession] = useState<Session | null>(null);
 
-  const [reportingUser, setReportingUser] = useState<UserLite | null>(null);
+  const [reportingUsers, setReportingUsers] = useState<UserLite[]>([]);
   const [assigneeUsers, setAssigneeUsers] = useState<UserLite[]>([]);
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -185,7 +185,17 @@ export default function ProjectsPage() {
       const res = await fetch(`/api/projects?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load projects");
-      setProjects(data.projects ?? []);
+      const normalized: Project[] = (data.projects ?? []).map(
+        (p: Project & { reportingTo: UserLite[] | UserLite | null }) => ({
+          ...p,
+          reportingTo: Array.isArray(p.reportingTo)
+            ? p.reportingTo
+            : p.reportingTo
+            ? [p.reportingTo as UserLite]
+            : [],
+        })
+      );
+      setProjects(normalized);
       setTotal(data.total ?? 0);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load projects");
@@ -198,6 +208,21 @@ export default function ProjectsPage() {
     loadProjects();
   }, [loadProjects]);
 
+  const patchProjectLocal = useCallback((updated: Project) => {
+    const normalized: Project = {
+      ...updated,
+      reportingTo: Array.isArray(updated.reportingTo)
+        ? updated.reportingTo
+        : updated.reportingTo
+        ? [updated.reportingTo as UserLite]
+        : [],
+      assignees: updated.assignees ?? [],
+    };
+    setProjects((prev) =>
+      prev.map((p) => (p._id === normalized._id ? normalized : p))
+    );
+  }, []);
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const rangeStart = total === 0 ? 0 : (page - 1) * limit + 1;
   const rangeEnd = Math.min(page * limit, total);
@@ -206,7 +231,7 @@ export default function ProjectsPage() {
   async function openCreate() {
     setEditing(null);
     setForm(emptyForm);
-    setReportingUser(null);
+    setReportingUsers([]);
     setAssigneeUsers([]);
     setFormErrors({});
     setFormAlert(null);
@@ -221,15 +246,20 @@ export default function ProjectsPage() {
   }
 
   function openEdit(p: Project) {
+    const rtList = Array.isArray(p.reportingTo)
+      ? p.reportingTo
+      : p.reportingTo
+      ? [p.reportingTo as UserLite]
+      : [];
     setEditing(p);
     setNextId(p.projectId);
     setForm({
       name: p.name,
       status: p.status,
-      reportingTo: p.reportingTo?._id ?? "",
-      assignees: p.assignees.map((a) => a._id),
+      reportingTo: rtList.map((u) => u._id),
+      assignees: (p.assignees ?? []).map((a) => a._id),
     });
-    setReportingUser(p.reportingTo ?? null);
+    setReportingUsers(rtList);
     setAssigneeUsers(p.assignees ?? []);
     setFormErrors({});
     setFormAlert(null);
@@ -240,7 +270,8 @@ export default function ProjectsPage() {
     const errs: FieldErrors = {};
     if (form.name.trim().length < 2)
       errs.name = "Project name must be at least 2 characters";
-    if (!form.reportingTo) errs.reportingTo = "Select a reporting person";
+    if (form.reportingTo.length === 0)
+      errs.reportingTo = "Select at least one reporting person";
     return errs;
   }
 
@@ -438,10 +469,18 @@ export default function ProjectsPage() {
                     <StatusBadge status={p.status} />
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
-                    <PersonChip user={p.reportingTo} />
+                    <ReportingStack
+                      project={p}
+                      canEdit={canEdit}
+                      onUpdated={patchProjectLocal}
+                    />
                   </TableCell>
                   <TableCell className="px-3 py-2.5">
-                    <AssigneeStack assignees={p.assignees} projectId={p._id} />
+                    <AssigneeStack
+                      project={p}
+                      canEdit={canEdit}
+                      onUpdated={patchProjectLocal}
+                    />
                   </TableCell>
                   <TableCell className="px-3 py-2.5 text-sm text-muted-foreground">
                     {p.createdBy?.name ?? "—"}
@@ -501,12 +540,18 @@ export default function ProjectsPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <StatusBadge status={p.status} />
-                  {p.reportingTo && (
-                    <span>Reports: {p.reportingTo.name}</span>
+                  {p.reportingTo && p.reportingTo.length > 0 && (
+                    <span>
+                      Reports: {p.reportingTo.map((u) => u.name).join(", ")}
+                    </span>
                   )}
                   <span>Created by: {p.createdBy?.name ?? "—"}</span>
                 </div>
-                <AssigneeStack assignees={p.assignees} projectId={p._id} />
+                <AssigneeStack
+                  project={p}
+                  canEdit={canEdit}
+                  onUpdated={patchProjectLocal}
+                />
               </li>
             ))}
           </ul>
@@ -571,7 +616,10 @@ export default function ProjectsPage() {
 
       {canEdit && (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent
+            className="sm:max-w-lg"
+            onInteractOutside={(e) => e.preventDefault()}
+          >
             <form onSubmit={handleSubmit} className="space-y-4">
               <DialogHeader>
                 <DialogTitle>
@@ -647,11 +695,14 @@ export default function ProjectsPage() {
                     Reporting to
                     <RequiredMark />
                   </Label>
-                  <ReportingPicker
-                    selected={reportingUser}
-                    onChange={(u) => {
-                      setReportingUser(u);
-                      setForm((f) => ({ ...f, reportingTo: u?._id ?? "" }));
+                  <AssigneesPicker
+                    selected={reportingUsers}
+                    onChange={(list) => {
+                      setReportingUsers(list);
+                      setForm((f) => ({
+                        ...f,
+                        reportingTo: list.map((u) => u._id),
+                      }));
                       if (formErrors.reportingTo)
                         setFormErrors((p) => ({ ...p, reportingTo: "" }));
                     }}
@@ -673,7 +724,7 @@ export default function ProjectsPage() {
                     if (formErrors.assignees)
                       setFormErrors((p) => ({ ...p, assignees: "" }));
                   }}
-                  excludeIds={reportingUser ? [reportingUser._id] : []}
+                  excludeIds={reportingUsers.map((u) => u._id)}
                 />
                 {formErrors.assignees ? (
                   <FieldError message={formErrors.assignees} />
@@ -745,16 +796,39 @@ function PersonChip({ user }: { user: UserLite | null }) {
 }
 
 function AssigneeStack({
-  assignees,
-  projectId,
+  project,
+  canEdit,
+  onUpdated,
 }: {
-  assignees: UserLite[];
-  projectId: string;
+  project: Project;
+  canEdit: boolean;
+  onUpdated: (next: Project) => void;
 }) {
-  const list = assignees ?? [];
+  const list = project.assignees ?? [];
   const shown = list.slice(0, 4);
   const extra = list.length - shown.length;
-  const overflow = list.slice(shown.length);
+  const excludeIds = [
+    ...list.map((u) => u._id),
+    ...(project.reportingTo ?? []).map((u) => u._id),
+  ];
+
+  async function addMember(u: UserLite) {
+    const next = [...list.map((x) => x._id), u._id];
+    try {
+      const res = await fetch(`/api/projects/${project._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignees: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add");
+      onUpdated(data.project);
+      toast.success(`${u.name} added`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add");
+    }
+  }
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="flex items-center -space-x-2">
@@ -772,50 +846,182 @@ function AssigneeStack({
             <TooltipContent>{a.name}</TooltipContent>
           </Tooltip>
         ))}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Link
-              href={`/dashboard/projects/${projectId}`}
-              aria-label={
-                extra > 0 ? `${extra} more assignees` : "Manage assignees"
-              }
-              className={cn(
-                "relative z-0 flex size-7 items-center justify-center rounded-full border-2 border-muted-foreground/30 bg-background text-muted-foreground transition-all hover:z-10 hover:scale-110 hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
-              )}
-            >
-              {extra > 0 ? (
+        {extra > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={`/dashboard/projects/${project._id}`}
+                aria-label={`${extra} more assignees`}
+                className="relative z-0 flex size-7 items-center justify-center rounded-full border-2 border-muted-foreground/30 bg-background text-muted-foreground transition-all hover:z-10 hover:scale-110 hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
+              >
                 <span className="text-[10px] font-semibold">+{extra}</span>
-              ) : (
-                <UserPlus className="size-3" />
-              )}
-            </Link>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs">
-            {extra > 0 ? (
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
               <div className="text-xs">
-                <div className="mb-0.5 font-medium">
-                  {extra} more assignee{extra === 1 ? "" : "s"}
-                </div>
-                {overflow.slice(0, 8).map((u) => (
+                {list.slice(shown.length).slice(0, 8).map((u) => (
                   <div key={u._id} className="text-muted-foreground">
                     {u.name}
                   </div>
                 ))}
-                {overflow.length > 8 && (
-                  <div className="text-muted-foreground">
-                    …and {overflow.length - 8} more
-                  </div>
+                {list.slice(shown.length).length > 8 && (
+                  <div className="text-muted-foreground">…and more</div>
                 )}
               </div>
-            ) : list.length === 0 ? (
-              "Assign people"
-            ) : (
-              "Manage assignees"
-            )}
-          </TooltipContent>
-        </Tooltip>
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {canEdit && (
+          <InlineAddPopover
+            excludeIds={excludeIds}
+            onPick={addMember}
+            ariaLabel="Add assignee"
+          />
+        )}
       </div>
     </TooltipProvider>
+  );
+}
+
+function ReportingStack({
+  project,
+  canEdit,
+  onUpdated,
+}: {
+  project: Project;
+  canEdit: boolean;
+  onUpdated: (next: Project) => void;
+}) {
+  const list = Array.isArray(project.reportingTo) ? project.reportingTo : [];
+  const shown = list.slice(0, 4);
+  const extra = list.length - shown.length;
+  const excludeIds = [
+    ...list.map((u) => u._id),
+    ...(project.assignees ?? []).map((u) => u._id),
+  ];
+
+  async function addMember(u: UserLite) {
+    const next = [...list.map((x) => x._id), u._id];
+    try {
+      const res = await fetch(`/api/projects/${project._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportingTo: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add");
+      onUpdated(data.project);
+      toast.success(`${u.name} added`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add");
+    }
+  }
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="flex items-center -space-x-2">
+        {list.length === 0 && (
+          <span className="mr-2 text-sm text-muted-foreground">—</span>
+        )}
+        {shown.map((u) => (
+          <Tooltip key={u._id}>
+            <TooltipTrigger asChild>
+              <div className="relative z-0 rounded-full ring-2 ring-background transition-transform hover:z-10 hover:scale-110">
+                <UserInitialsAvatar
+                  name={u.name}
+                  role={u.role}
+                  className="size-7 text-[10px]"
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>{u.name}</TooltipContent>
+          </Tooltip>
+        ))}
+        {extra > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={`/dashboard/projects/${project._id}`}
+                aria-label={`${extra} more reporting persons`}
+                className="relative z-0 flex size-7 items-center justify-center rounded-full border-2 border-muted-foreground/30 bg-background text-muted-foreground transition-all hover:z-10 hover:scale-110 hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
+              >
+                <span className="text-[10px] font-semibold">+{extra}</span>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <div className="text-xs">
+                {list.slice(shown.length).slice(0, 8).map((u) => (
+                  <div key={u._id} className="text-muted-foreground">
+                    {u.name}
+                  </div>
+                ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {canEdit && (
+          <InlineAddPopover
+            excludeIds={excludeIds}
+            onPick={addMember}
+            ariaLabel="Add reporting person"
+          />
+        )}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function InlineAddPopover({
+  excludeIds,
+  onPick,
+  ariaLabel,
+}: {
+  excludeIds: string[];
+  onPick: (u: UserLite) => void | Promise<void>;
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const { query, setQuery, results, loading, error } = useUserSearch(open);
+  const excludeSet = new Set(excludeIds);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          className="relative z-0 flex size-7 items-center justify-center rounded-full border-2 border-muted-foreground/30 bg-background text-muted-foreground transition-all hover:z-10 hover:scale-110 hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
+        >
+          <UserPlus className="size-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="border-b p-2">
+          <InputGroup className={`h-8 ${controlClasses}`}>
+            <InputGroupAddon>
+              <Search className="text-muted-foreground" />
+            </InputGroupAddon>
+            <InputGroupInput
+              placeholder="Search people"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoFocus
+            />
+          </InputGroup>
+        </div>
+        <UserSearchList
+          loading={loading}
+          error={error}
+          results={results}
+          isSelected={(id) => excludeSet.has(id)}
+          onPick={async (u) => {
+            if (excludeSet.has(u._id)) return;
+            await onPick(u);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 

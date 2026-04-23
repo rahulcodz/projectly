@@ -65,12 +65,12 @@ export function AppSidebar({ role }: { role?: UserRole }) {
             P
           </div>
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="text-sm font-semibold tracking-tight">
+            <span className="text-lg font-semibold tracking-tight">
               Projectly
             </span>
-            <span className="text-[10px] text-muted-foreground">
+            {/* <span className="text-[10px] text-muted-foreground">
               Project Management
-            </span>
+            </span> */}
           </div>
         </Link>
       </SidebarHeader>
@@ -100,7 +100,7 @@ export function AppSidebar({ role }: { role?: UserRole }) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
+      {/* <SidebarFooter>
         <div className="flex items-center justify-between gap-2 px-2 py-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
           <span className="inline-flex items-center gap-1.5">
             <span className="size-1.5 rounded-full bg-emerald-500" />
@@ -108,7 +108,7 @@ export function AppSidebar({ role }: { role?: UserRole }) {
           </span>
           <span>v0.1.0</span>
         </div>
-      </SidebarFooter>
+      </SidebarFooter> */}
     </Sidebar>
   );
 }

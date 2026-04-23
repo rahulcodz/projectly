@@ -1518,7 +1518,10 @@ function EditTaskDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent
+        className="sm:max-w-xl"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <form onSubmit={onSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Edit task</DialogTitle>
@@ -1629,7 +1632,6 @@ function EditTaskDialog({
                 selected={assignees}
                 onChange={setAssignees}
                 placeholder="Select assignees"
-                excludeIds={reporting.map((u) => u._id)}
               />
               <FieldError message={errors.assignees} />
             </div>
@@ -1639,7 +1641,6 @@ function EditTaskDialog({
                 selected={reporting}
                 onChange={setReporting}
                 placeholder="Select reporting persons"
-                excludeIds={assignees.map((u) => u._id)}
               />
               <FieldError message={errors.reportingPersons} />
             </div>

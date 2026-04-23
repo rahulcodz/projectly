@@ -157,7 +157,7 @@ export async function POST(
           ...taskAssignees,
           ...taskReporting,
         ]);
-        if (project.reportingTo) allowed.add(String(project.reportingTo));
+        for (const r of project.reportingTo ?? []) allowed.add(String(r));
         if (project.createdBy) allowed.add(String(project.createdBy));
         if (task.createdBy) allowed.add(String(task.createdBy));
 

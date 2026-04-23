@@ -17,7 +17,9 @@ import {
 const createSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters"),
   status: z.enum(["active", "inactive"]).default("active"),
-  reportingTo: z.string().min(1, "Reporting person is required"),
+  reportingTo: z
+    .array(z.string())
+    .min(1, "Select at least one reporting person"),
   assignees: z.array(z.string()).default([]),
 });
 
@@ -114,8 +116,10 @@ export async function POST(req: NextRequest) {
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) return validationResponse(parsed.error);
 
-    if (!isValidId(parsed.data.reportingTo)) {
-      return fieldError("reportingTo", "Invalid reporting person");
+    for (const id of parsed.data.reportingTo) {
+      if (!isValidId(id)) {
+        return fieldError("reportingTo", "Invalid reporting person");
+      }
     }
     for (const id of parsed.data.assignees) {
       if (!isValidId(id)) {
@@ -133,7 +137,9 @@ export async function POST(req: NextRequest) {
       name: parsed.data.name,
       status: parsed.data.status,
       createdBy: new mongoose.Types.ObjectId(session.sub),
-      reportingTo: new mongoose.Types.ObjectId(parsed.data.reportingTo),
+      reportingTo: parsed.data.reportingTo.map(
+        (id) => new mongoose.Types.ObjectId(id)
+      ),
       assignees: parsed.data.assignees.map(
         (id) => new mongoose.Types.ObjectId(id)
       ),
@@ -157,9 +163,10 @@ export async function POST(req: NextRequest) {
           recipients.push({ user: a, role: "assignee" });
         }
       }
-      const rt = populated.reportingTo as unknown as P | null;
-      if (rt && String(rt._id) !== session.sub) {
-        recipients.push({ user: rt, role: "reportingTo" });
+      for (const rt of (populated.reportingTo ?? []) as unknown as P[]) {
+        if (rt && String(rt._id) !== session.sub) {
+          recipients.push({ user: rt, role: "reportingTo" });
+        }
       }
 
       Promise.allSettled(

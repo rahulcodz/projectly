@@ -7,7 +7,6 @@ import {
   FolderKanban,
   ListChecks,
   RefreshCw,
-  Sparkles,
   Users,
 } from "lucide-react";
 
@@ -36,7 +35,7 @@ type ProjectLite = {
   name: string;
   status: "active" | "inactive";
   updatedAt?: string;
-  reportingTo?: UserLite | null;
+  reportingTo?: UserLite[];
   assignees?: UserLite[];
 };
 
@@ -126,44 +125,29 @@ export default function DashboardHome() {
   const canManage = role === "admin" || role === "project_manager";
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary to-primary/80 p-6 text-primary-foreground shadow-sm sm:p-8">
-        <div
-          aria-hidden
-          className="absolute -top-16 -right-16 size-56 rounded-full bg-white/15 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="absolute -bottom-20 -left-10 size-56 rounded-full bg-black/15 blur-3xl"
-        />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-xs font-medium backdrop-blur">
-              <Sparkles className="size-3" /> Dashboard
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Welcome back, {firstName}.
-            </h1>
-            <p className="text-primary-foreground/85 text-sm sm:text-base">
-              {isUser
-                ? "Here's what's assigned to you."
-                : "Real-time pulse across your workspace."}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-primary-foreground/90">
-            <RefreshCw
-              className={cn("size-3.5", loading && "animate-spin")}
-            />
-            {lastUpdated
-              ? `Updated ${lastUpdated.toLocaleTimeString()}`
-              : "Loading…"}
-          </div>
+    <div className="flex flex-col gap-4">
+      <section className="flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+            Welcome back, {firstName}.
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            {isUser
+              ? "Here's what's assigned to you."
+              : "Real-time pulse across your workspace."}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <RefreshCw className={cn("size-3", loading && "animate-spin")} />
+          {lastUpdated
+            ? `Updated ${lastUpdated.toLocaleTimeString()}`
+            : "Loading…"}
         </div>
       </section>
 
       <section
         className={cn(
-          "grid gap-4 sm:grid-cols-2",
+          "grid gap-3 sm:grid-cols-2",
           canManage ? "lg:grid-cols-4" : "lg:grid-cols-3"
         )}
       >
@@ -209,7 +193,7 @@ export default function DashboardHome() {
 
       <section
         className={cn(
-          "grid gap-4",
+          "grid gap-3",
           canManage ? "lg:grid-cols-2" : "lg:grid-cols-1"
         )}
       >
@@ -223,7 +207,7 @@ export default function DashboardHome() {
             <Link
               key={p._id}
               href={`/dashboard/projects/${p._id}`}
-              className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50"
+              className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 hover:bg-muted/50"
             >
               <span className="rounded-md border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                 {p.projectId}
@@ -252,7 +236,7 @@ export default function DashboardHome() {
                   ? `/dashboard/projects/${t.project._id}?task=${t._id}`
                   : "#"
               }
-              className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50"
+              className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 hover:bg-muted/50"
             >
               <span className="flex-1 min-w-0">
                 <span className="block truncate text-sm font-medium">
@@ -274,9 +258,9 @@ export default function DashboardHome() {
       </section>
 
       {canManage && (
-        <section className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
+        <section className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border bg-card p-4 shadow-sm">
+            <div className="mb-2.5 flex items-center justify-between">
               <h2 className="text-sm font-semibold">Team breakdown</h2>
               <Link
                 href="/dashboard/users"
@@ -302,35 +286,35 @@ export default function DashboardHome() {
                 loading={loading}
               />
             </div>
-            <div className="mt-4 border-t border-border/40 pt-3">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="mt-3 border-t border-border/40 pt-2.5">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Recently added
               </div>
               {loading ? (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
+                    <Skeleton key={i} className="h-8 w-full" />
                   ))}
                 </div>
               ) : (data?.recentUsers?.length ?? 0) === 0 ? (
-                <p className="text-sm text-muted-foreground">No users yet.</p>
+                <p className="text-xs text-muted-foreground">No users yet.</p>
               ) : (
                 <ul className="divide-y divide-border/40">
                   {data?.recentUsers?.map((u) => (
                     <li
                       key={u._id}
-                      className="flex items-center gap-3 py-2"
+                      className="flex items-center gap-2.5 py-1.5"
                     >
                       <UserInitialsAvatar
                         name={u.name}
                         role={u.role}
-                        className="size-8 text-[11px]"
+                        className="size-7 text-[10px]"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">
+                        <div className="truncate text-xs font-medium">
                           {u.name}
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">
+                        <div className="truncate text-[11px] text-muted-foreground">
                           {u.email}
                         </div>
                       </div>
@@ -369,23 +353,23 @@ function StatCard({
 }) {
   return (
     <Link href={href} className="group">
-      <div className="h-full rounded-xl border bg-card p-5 shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
+      <div className="h-full rounded-xl border bg-card p-3.5 shadow-sm transition-all hover:border-primary/30 hover:shadow-md">
         <div className="flex items-start justify-between">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Icon className="size-5" />
+          <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Icon className="size-4" />
           </div>
-          <ArrowUpRight className="size-4 text-muted-foreground transition-all group-hover:text-primary group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+          <ArrowUpRight className="size-3.5 text-muted-foreground transition-all group-hover:text-primary group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
         </div>
-        <div className="mt-4">
-          <div className="text-sm text-muted-foreground">{label}</div>
-          <div className="mt-0.5 text-3xl font-bold tracking-tight">
+        <div className="mt-2.5">
+          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className="mt-0.5 text-2xl font-bold tracking-tight">
             {loading ? (
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-7 w-14" />
             ) : (
               (value ?? 0).toLocaleString()
             )}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">{sub}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{sub}</p>
         </div>
       </div>
     </Link>
@@ -408,25 +392,25 @@ function StatusMiniCard({
     "done",
   ];
   return (
-    <div className="h-full rounded-xl border bg-card p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">Task status</div>
-        <ListChecks className="size-4 text-muted-foreground" />
+    <div className="h-full rounded-xl border bg-card p-3.5 shadow-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">Task status</div>
+        <ListChecks className="size-3.5 text-muted-foreground" />
       </div>
       {loading ? (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-5 w-full" />
+            <Skeleton key={i} className="h-4 w-full" />
           ))}
         </div>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="space-y-1">
           {keys.map((k) => (
             <li
               key={k}
-              className="flex items-center justify-between text-xs"
+              className="flex items-center justify-between text-[11px]"
             >
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5">
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
@@ -463,8 +447,8 @@ function StatusDistributionCard({
   ];
   const total = keys.reduce((sum, k) => sum + (breakdown?.[k] ?? 0), 0) || 1;
   return (
-    <div className="rounded-xl border bg-card p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="mb-2.5 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Task pipeline</h2>
         <Link
           href="/dashboard/tasks"
@@ -480,14 +464,14 @@ function StatusDistributionCard({
           ))}
         </div>
       ) : (
-        <ul className="space-y-2.5">
+        <ul className="space-y-2">
           {keys.map((k) => {
             const n = breakdown?.[k] ?? 0;
             const pct = Math.round((n / total) * 100);
             return (
               <li key={k} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5">
                     <span
                       className={cn(
                         "size-1.5 rounded-full",
@@ -500,7 +484,7 @@ function StatusDistributionCard({
                     {n} · {pct}%
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="h-1 overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn(
                       "h-full rounded-full",
@@ -533,10 +517,10 @@ function RoleChip({
     user: "Users",
   };
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
+    <div className="flex items-center gap-1.5 rounded-lg border bg-background px-2.5 py-1.5">
       <RoleBadge role={role} />
-      <span className="text-xs text-muted-foreground">{labels[role]}</span>
-      <span className="text-sm font-semibold">
+      <span className="text-[11px] text-muted-foreground">{labels[role]}</span>
+      <span className="text-xs font-semibold">
         {loading ? "…" : count}
       </span>
     </div>
@@ -560,24 +544,24 @@ function Panel<T extends { _id: string }>({
 }) {
   return (
     <div className="rounded-xl border bg-card shadow-sm">
-      <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-border/40 px-3 py-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         <Link
           href={href}
-          className="text-xs text-muted-foreground hover:text-primary"
+          className="text-[11px] text-muted-foreground hover:text-primary"
         >
           View all
         </Link>
       </div>
-      <div className="p-2">
+      <div className="p-1.5">
         {loading ? (
-          <div className="space-y-2 p-1">
+          <div className="space-y-1.5 p-1">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
+              <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
         ) : items.length === 0 ? (
-          <p className="p-4 text-sm text-muted-foreground">{empty}</p>
+          <p className="p-3 text-xs text-muted-foreground">{empty}</p>
         ) : (
           <ul className="flex flex-col">{items.map(render)}</ul>
         )}

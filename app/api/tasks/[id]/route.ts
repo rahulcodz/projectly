@@ -7,10 +7,12 @@ import { z } from "zod";
 import { connectDB } from "@/lib/mongodb";
 import Task, {
   TASK_PRIORITIES,
+  TASK_PRIORITY_LABELS,
   TASK_STATUSES,
   TASK_STATUS_LABELS,
 } from "@/models/Task";
 import User from "@/models/User";
+import Comment from "@/models/Comment";
 import { getSession } from "@/lib/auth";
 import { getProjectForSession, canManageProject } from "@/lib/project-access";
 import { fieldError, validationResponse } from "@/lib/api-errors";
@@ -199,6 +201,8 @@ export async function PATCH(
     const prevReporting = new Set(
       (task.reportingPersons ?? []).map((x) => String(x))
     );
+    const prevStatus = task.status;
+    const prevPriority = task.priority;
 
     const updated = await Task.findByIdAndUpdate(id, update, { new: true })
       .populate("createdBy", "name email role")
@@ -319,6 +323,152 @@ export async function PATCH(
         // swallow
       }
 
+      // System activity logs: status, priority, assignee, reporting changes.
+      try {
+        const logs: Array<{
+          body: string;
+          system: {
+            type:
+              | "status"
+              | "priority"
+              | "assignee_added"
+              | "assignee_removed"
+              | "reporting_added"
+              | "reporting_removed";
+            from?: string;
+            to?: string;
+            userIds?: mongoose.Types.ObjectId[];
+          };
+        }> = [];
+
+        if (
+          parsed.data.status !== undefined &&
+          parsed.data.status !== prevStatus
+        ) {
+          const from = TASK_STATUS_LABELS[prevStatus] ?? prevStatus;
+          const to =
+            TASK_STATUS_LABELS[parsed.data.status] ?? parsed.data.status;
+          logs.push({
+            body: `changed status from ${from} to ${to}`,
+            system: { type: "status", from, to },
+          });
+        }
+        if (
+          parsed.data.priority !== undefined &&
+          parsed.data.priority !== prevPriority
+        ) {
+          const from = TASK_PRIORITY_LABELS[prevPriority] ?? prevPriority;
+          const to =
+            TASK_PRIORITY_LABELS[parsed.data.priority] ?? parsed.data.priority;
+          logs.push({
+            body: `changed priority from ${from} to ${to}`,
+            system: { type: "priority", from, to },
+          });
+        }
+
+        const addedAssLog: string[] = [];
+        const removedAssLog: string[] = [];
+        if (parsed.data.assignees !== undefined) {
+          const next = new Set(parsed.data.assignees);
+          for (const u of next)
+            if (!prevAssignees.has(u)) addedAssLog.push(u);
+          for (const u of prevAssignees)
+            if (!next.has(u)) removedAssLog.push(u);
+        }
+        const addedRepLog: string[] = [];
+        const removedRepLog: string[] = [];
+        if (parsed.data.reportingPersons !== undefined) {
+          const next = new Set(parsed.data.reportingPersons);
+          for (const u of next)
+            if (!prevReporting.has(u)) addedRepLog.push(u);
+          for (const u of prevReporting)
+            if (!next.has(u)) removedRepLog.push(u);
+        }
+
+        const allLogIds = Array.from(
+          new Set([
+            ...addedAssLog,
+            ...removedAssLog,
+            ...addedRepLog,
+            ...removedRepLog,
+          ])
+        );
+        const nameById = new Map<string, string>();
+        if (allLogIds.length > 0) {
+          const users = await User.find({ _id: { $in: allLogIds } })
+            .select("name")
+            .lean();
+          for (const u of users) {
+            nameById.set(String(u._id), (u as { name: string }).name);
+          }
+        }
+        const namesOf = (ids: string[]) =>
+          ids.map((x) => nameById.get(x) ?? "someone").join(", ");
+
+        if (addedAssLog.length > 0) {
+          logs.push({
+            body: `added ${namesOf(addedAssLog)} as assignee${
+              addedAssLog.length > 1 ? "s" : ""
+            }`,
+            system: {
+              type: "assignee_added",
+              userIds: addedAssLog.map(
+                (x) => new mongoose.Types.ObjectId(x)
+              ),
+            },
+          });
+        }
+        if (removedAssLog.length > 0) {
+          logs.push({
+            body: `removed ${namesOf(removedAssLog)} from assignees`,
+            system: {
+              type: "assignee_removed",
+              userIds: removedAssLog.map(
+                (x) => new mongoose.Types.ObjectId(x)
+              ),
+            },
+          });
+        }
+        if (addedRepLog.length > 0) {
+          logs.push({
+            body: `added ${namesOf(addedRepLog)} as reporting person${
+              addedRepLog.length > 1 ? "s" : ""
+            }`,
+            system: {
+              type: "reporting_added",
+              userIds: addedRepLog.map(
+                (x) => new mongoose.Types.ObjectId(x)
+              ),
+            },
+          });
+        }
+        if (removedRepLog.length > 0) {
+          logs.push({
+            body: `removed ${namesOf(removedRepLog)} from reporting persons`,
+            system: {
+              type: "reporting_removed",
+              userIds: removedRepLog.map(
+                (x) => new mongoose.Types.ObjectId(x)
+              ),
+            },
+          });
+        }
+
+        if (logs.length > 0) {
+          await Comment.insertMany(
+            logs.map((l) => ({
+              task: new mongoose.Types.ObjectId(id),
+              author: new mongoose.Types.ObjectId(session.sub),
+              body: l.body,
+              kind: "system",
+              system: l.system,
+            }))
+          );
+        }
+      } catch {
+        // swallow — logging failure shouldn't break update
+      }
+
       // Subtask mention email
       try {
         const sm = parsed.data.subtaskMention;
@@ -333,8 +483,8 @@ export async function PATCH(
               ...(access.task.assignees ?? []).map((a) => String(a)),
               ...(access.task.reportingPersons ?? []).map((a) => String(a)),
             ]);
-            if (project.reportingTo)
-              allowed.add(String(project.reportingTo));
+            for (const r of project.reportingTo ?? [])
+              allowed.add(String(r));
             if (project.createdBy) allowed.add(String(project.createdBy));
             if (access.task.createdBy)
               allowed.add(String(access.task.createdBy));
