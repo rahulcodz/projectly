@@ -1584,7 +1584,7 @@ export default function ProjectDetailPage() {
               <Button
                 size="sm"
                 className="mt-2"
-                onClick={() => openTaskCreate()}
+                onClick={openCreateTask}
               >
                 <Plus className="mr-1 size-3.5" /> Add task
               </Button>
