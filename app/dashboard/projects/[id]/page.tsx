@@ -328,7 +328,8 @@ export default function ProjectDetailPage() {
   };
 
   const [projComments, setProjComments] = useState<CommentT[]>([]);
-  const [projCommentsLoading, setProjCommentsLoading] = useState(true);
+  const [projCommentsLoading, setProjCommentsLoading] = useState(false);
+  const projCommentsFetchedRef = useRef(false);
   const [newProjComment, setNewProjComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [commentAlert, setCommentAlert] = useState<string | null>(null);
@@ -656,9 +657,16 @@ export default function ProjectDetailPage() {
     }
   }, [id]);
 
+  const ensureProjComments = useCallback(() => {
+    if (projCommentsFetchedRef.current) return;
+    projCommentsFetchedRef.current = true;
+    loadProjComments();
+  }, [loadProjComments]);
+
   useEffect(() => {
-    if (project) loadProjComments();
-  }, [project, loadProjComments]);
+    if (!project) return;
+    if (tab === "overview" || tab === "files") ensureProjComments();
+  }, [project, tab, ensureProjComments]);
 
   const hydratedRef = useRef(false);
 
@@ -1099,9 +1107,6 @@ export default function ProjectDetailPage() {
               >
                 <FolderKanban className="size-4 text-muted-foreground group-data-[state=active]:text-primary" />
                 <span>Overview</span>
-                <span className="ml-0.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
-                  {projCommentsLoading ? "…" : projComments.length}
-                </span>
               </TabsTrigger>
               <TabsTrigger
                 value="tasks"
@@ -1109,9 +1114,6 @@ export default function ProjectDetailPage() {
               >
                 <ListChecks className="size-4 text-muted-foreground group-data-[state=active]:text-primary" />
                 <span>Tasks</span>
-                <span className="ml-0.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
-                  {tasksLoading ? "…" : tasks.length}
-                </span>
               </TabsTrigger>
               <TabsTrigger
                 value="files"
@@ -1119,9 +1121,6 @@ export default function ProjectDetailPage() {
               >
                 <Paperclip className="size-4 text-muted-foreground group-data-[state=active]:text-primary" />
                 <span>Files</span>
-                <span className="ml-0.5 rounded-full border bg-background px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
-                  {projectFilesCount}
-                </span>
               </TabsTrigger>
               {openTaskTabs.map((t) => (
                 <TabsTrigger
