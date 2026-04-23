@@ -25,10 +25,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FieldError, FormAlert, RequiredMark } from "@/components/form-error";
 import { type FieldErrors, parseApiError } from "@/lib/form-errors";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type Invitee = { name: string; email: string };
 
 function AcceptInviteForm() {
+  usePageTitle("Accept invite");
   const router = useRouter();
   const search = useSearchParams();
   const token = search.get("token") ?? "";

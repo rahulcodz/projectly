@@ -5,7 +5,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "Projectly",
+  title: {
+    default: "Projectly",
+    template: "%s · Projectly",
+  },
   description: "Project management for teams — manage projects, tasks, and users.",
 };
 

@@ -87,6 +87,7 @@ import {
   type HashTask,
 } from "@/components/rich-text-editor";
 import { MentionInput } from "@/components/mention-input";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   PriorityBadge,
@@ -1045,6 +1046,26 @@ export default function ProjectDetailPage() {
       setTaskSubmitting(false);
     }
   }
+
+  const activeTaskFromTab = tab.startsWith("task:")
+    ? tasks.find((t) => t._id === tab.slice("task:".length)) ?? null
+    : null;
+
+  usePageTitle(
+    loading
+      ? "Loading project…"
+      : error
+      ? "Project not found"
+      : project
+      ? activeTaskFromTab
+        ? `${
+            activeTaskFromTab.taskId ? `${activeTaskFromTab.taskId} · ` : ""
+          }${activeTaskFromTab.title} · ${project.name}`
+        : `${project.name}${
+            project.projectId ? ` (${project.projectId})` : ""
+          }`
+      : null
+  );
 
   if (loading) return <DetailSkeleton />;
   if (error || !project)

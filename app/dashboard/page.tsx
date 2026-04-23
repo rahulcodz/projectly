@@ -18,6 +18,7 @@ import {
   type TaskStatusKey,
   UserInitialsAvatar,
 } from "@/components/role-status-badge";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { type UserRole } from "@/lib/roles";
@@ -77,6 +78,7 @@ type Session = {
 const POLL_MS = 30_000;
 
 export default function DashboardHome() {
+  usePageTitle("Dashboard");
   const [session, setSession] = useState<Session | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);

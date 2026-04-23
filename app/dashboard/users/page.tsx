@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -108,6 +109,7 @@ const controlClasses =
   "shadow-none border-border bg-background focus-visible:ring-primary/30 focus-visible:border-primary/60";
 
 export default function UsersPage() {
+  usePageTitle("Users");
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);

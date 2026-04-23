@@ -23,9 +23,11 @@ import {
 } from "@/components/ui/input-group";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FieldError, FormAlert, RequiredMark } from "@/components/form-error";
+import { usePageTitle } from "@/hooks/use-page-title";
 import { type FieldErrors, parseApiError } from "@/lib/form-errors";
 
 function LoginForm() {
+  usePageTitle("Sign in");
   const router = useRouter();
   const search = useSearchParams();
   const redirect = search.get("redirect") ?? "/dashboard";

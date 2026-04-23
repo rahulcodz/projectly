@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { usePageTitle } from "@/hooks/use-page-title";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -123,6 +124,7 @@ const emptyForm = {
 };
 
 export default function ProjectsPage() {
+  usePageTitle("Projects");
   const [session, setSession] = useState<Session | null>(null);
 
   const [reportingUsers, setReportingUsers] = useState<UserLite[]>([]);

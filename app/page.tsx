@@ -14,8 +14,13 @@ import {
   Users,
   Zap,
 } from "lucide-react";
+import type { Metadata } from "next";
 import { Button } from "@/components/ui/button";
 import { getSession } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Project management for teams",
+};
 
 export default async function Page() {
   const session = await getSession();

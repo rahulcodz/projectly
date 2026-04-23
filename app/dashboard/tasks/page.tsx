@@ -78,6 +78,7 @@ import { UserMultiPicker } from "@/components/user-pickers";
 import { parseApiError, type FieldErrors } from "@/lib/form-errors";
 import { cn } from "@/lib/utils";
 import { type UserRole } from "@/lib/roles";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type UserLite = {
   _id: string;
@@ -159,6 +160,7 @@ const controlClasses =
   "shadow-none border-border bg-background focus-visible:ring-primary/30 focus-visible:border-primary/60";
 
 export default function TasksPage() {
+  usePageTitle("Tasks");
   const [session, setSession] = useState<Session | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [total, setTotal] = useState(0);
