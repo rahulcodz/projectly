@@ -1496,36 +1496,102 @@ export default function ProjectDetailPage() {
 
         {tasksLoading ? (
           view === "board" ? (
-            <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-3 xl:grid-cols-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-40 rounded-md" />
+            <div className="flex gap-3 overflow-x-auto px-4 py-3 sm:px-6">
+              {Array.from({ length: 6 }).map((_, col) => (
+                <div
+                  key={col}
+                  className="flex w-72 shrink-0 flex-col gap-2 rounded-lg border bg-muted/20 p-2"
+                >
+                  <div className="flex items-center justify-between px-1 py-1">
+                    <div className="flex items-center gap-1.5">
+                      <Skeleton className="size-2 rounded-full" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-4 w-6 rounded-full" />
+                  </div>
+                  {Array.from({ length: 2 + (col % 2) }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="space-y-2 rounded-lg border bg-card p-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Skeleton className="h-4 w-14 rounded-full" />
+                        <Skeleton className="h-4 w-10 rounded-full" />
+                      </div>
+                      <Skeleton className="h-3.5 w-4/5" />
+                      <Skeleton className="h-3 w-3/5" />
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="flex -space-x-2">
+                          <Skeleton className="size-6 rounded-full" />
+                          <Skeleton className="size-6 rounded-full" />
+                        </div>
+                        <Skeleton className="h-3 w-16" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
           ) : (
             <ul className="divide-y divide-border/40">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <li key={i} className="space-y-2 p-4">
-                  <Skeleton className="h-4 w-56" />
-                  <Skeleton className="h-3 w-40" />
+              {Array.from({ length: 5 }).map((_, i) => (
+                <li key={i} className="flex items-center gap-3 px-4 py-3 sm:px-6">
+                  <Skeleton className="h-4 w-20 shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-3.5 w-2/5" />
+                    <Skeleton className="h-3 w-1/4" />
+                  </div>
+                  <Skeleton className="hidden h-6 w-24 rounded-full sm:block" />
+                  <Skeleton className="hidden h-6 w-16 rounded-full md:block" />
+                  <div className="flex -space-x-2">
+                    <Skeleton className="size-7 rounded-full" />
+                    <Skeleton className="size-7 rounded-full" />
+                  </div>
                 </li>
               ))}
             </ul>
           )
         ) : tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-1 p-8 text-center">
-            <ListChecks className="size-5 text-muted-foreground" />
-            <p className="text-sm font-medium">No tasks yet</p>
-            <p className="text-xs text-muted-foreground">
-              Create the first task to start tracking work.
+          <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
+            <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20">
+              <ListChecks className="size-5" />
+            </div>
+            <p className="mt-1 text-sm font-semibold">No tasks yet</p>
+            <p className="max-w-xs text-xs text-muted-foreground">
+              Create the first task to start tracking work for this project.
             </p>
+            {canEdit && (
+              <Button
+                size="sm"
+                className="mt-2"
+                onClick={() => openTaskCreate()}
+              >
+                <Plus className="mr-1 size-3.5" /> Add task
+              </Button>
+            )}
           </div>
         ) : filteredTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-1 p-8 text-center">
-            <ListChecks className="size-5 text-muted-foreground" />
-            <p className="text-sm font-medium">No tasks match filters</p>
-            <p className="text-xs text-muted-foreground">
-              Try clearing filters or adjusting search.
+          <div className="flex flex-col items-center justify-center gap-2 p-10 text-center">
+            <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
+              <Search className="size-5" />
+            </div>
+            <p className="mt-1 text-sm font-semibold">No tasks match filters</p>
+            <p className="max-w-xs text-xs text-muted-foreground">
+              Try clearing filters or adjusting your search.
             </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => {
+                setTaskQuery("");
+                setTaskStatusFilter("all");
+                setTaskPriorityFilter("all");
+                setTaskAssigneeFilter("all");
+              }}
+            >
+              <X className="mr-1 size-3.5" /> Clear filters
+            </Button>
           </div>
         ) : view === "board" ? (
           <div className="overflow-x-auto lg:flex-1 lg:min-h-0">
@@ -2053,30 +2119,43 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
 
-                  <div className="border-b border-border/40 px-4 py-2 sm:px-6">
-                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      {t.createdBy && (
-                        <>
-                          <span>By {t.createdBy.name}</span>
-                          <span>· {formatDate(t.createdAt)}</span>
-                          <UserInitialsAvatar
-                            name={t.createdBy.name}
-                            role={t.createdBy.role}
-                            className="size-5 text-[9px]"
-                          />
-                        </>
-                      )}
-                      {!t.createdBy && (
-                        <span>{formatDate(t.createdAt)}</span>
-                      )}
-                    </div>
-                    {t.description && t.description.trim() !== "" ? (
-                      <RichTextViewer html={t.description} />
+                  <div className="flex items-start gap-2 border-b border-border/40 bg-primary/5 px-4 py-2 sm:px-6">
+                    {/* {t.createdBy ? (
+                      <UserInitialsAvatar
+                        name={t.createdBy.name}
+                        role={t.createdBy.role}
+                        className="size-6 text-[9px]"
+                      />
                     ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No description.
-                      </p>
-                    )}
+                      <UserInitialsAvatar name="T" className="size-6 text-[9px]" />
+                    )} */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        {t.createdBy && (
+                          <>
+                            <span className="font-medium text-foreground">
+                              {t.createdBy.name}
+                            </span>
+                            {t.createdBy.role && (
+                              <RoleBadge role={t.createdBy.role} />
+                            )}
+                          </>
+                        )}
+                        <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                          Description
+                        </span>
+                        <span>· {formatDate(t.createdAt)}</span>
+                      </div>
+                      <div className="mt-1">
+                        {t.description && t.description.trim() !== "" ? (
+                          <RichTextViewer html={t.description} />
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No description.
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <SubtaskPanel
@@ -2156,23 +2235,38 @@ export default function ProjectDetailPage() {
                   </div>
 
                   {state.loading ? (
-                    <div className="space-y-3 p-3 sm:px-6">
-                      {Array.from({ length: 2 }).map((_, i) => (
+                    <div className="space-y-4 px-4 py-4 sm:px-6">
+                      {Array.from({ length: 3 }).map((_, i) => (
                         <div key={i} className="flex items-start gap-2.5">
-                          <Skeleton className="size-7 rounded-full" />
+                          <Skeleton className="size-7 shrink-0 rounded-full" />
                           <div className="flex-1 space-y-1.5">
-                            <Skeleton className="h-3 w-40" />
-                            <Skeleton className="h-3 w-full" />
+                            <div className="flex items-center gap-1.5">
+                              <Skeleton className="h-3 w-24" />
+                              <Skeleton className="h-3 w-10 rounded-full" />
+                              <Skeleton className="h-3 w-16" />
+                            </div>
+                            <Skeleton
+                              className="h-3"
+                              style={{ width: `${70 - i * 12}%` }}
+                            />
+                            <Skeleton
+                              className="h-3"
+                              style={{ width: `${55 - i * 10}%` }}
+                            />
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : state.comments.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 text-center">
-                      <MessageSquare className="size-4 text-muted-foreground" />
-                      <p className="text-sm font-medium">No comments yet</p>
+                    <div className="flex flex-col items-center justify-center gap-1 p-6 text-center">
+                      <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20">
+                        <MessageSquare className="size-4" />
+                      </div>
+                      <p className="mt-1 text-sm font-semibold">
+                        No comments yet
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Be the first to reply.
+                        Start the discussion — be the first to reply.
                       </p>
                     </div>
                   ) : (
@@ -3113,53 +3207,120 @@ function PersonLine({ user }: { user: UserLite }) {
 function DetailSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <Skeleton className="h-3.5 w-32" />
-        <div className="flex items-start gap-4">
-          <Skeleton className="size-12 rounded-xl" />
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-3 w-48" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Skeleton className="size-7 rounded-md" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-20 rounded-md" />
+          <Skeleton className="h-8 w-24 rounded-md" />
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card/40 p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
+            <Skeleton className="size-14 shrink-0 rounded-xl" />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-20 rounded-full" />
+                <Skeleton className="h-5 w-14 rounded-full" />
+              </div>
+              <Skeleton className="h-7 w-56" />
+              <Skeleton className="h-3 w-72" />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Skeleton className="h-8 w-28 rounded-md" />
+            <Skeleton className="size-8 rounded-full" />
+            <Skeleton className="size-8 rounded-full" />
+            <Skeleton className="size-8 rounded-full" />
           </div>
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-28 w-full rounded-lg" />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="flex flex-col gap-2 rounded-lg border bg-card/40 p-4">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-6 w-16" />
+            <Skeleton className="h-3 w-24" />
+          </div>
         ))}
       </div>
-      <Skeleton className="h-64 w-full rounded-lg" />
+
+      <div className="rounded-xl border bg-card/40">
+        <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-7 w-20 rounded-md" />
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/40 px-4 py-2.5">
+          <Skeleton className="h-8 w-56 rounded-md" />
+          <Skeleton className="h-8 w-28 rounded-md" />
+          <Skeleton className="h-8 w-28 rounded-md" />
+          <Skeleton className="ml-auto h-6 w-24" />
+        </div>
+        <ul className="divide-y divide-border/40">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <li key={i} className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="size-8 shrink-0 rounded-md" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-2/5" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="size-7 rounded-full" />
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
 
 function DetailError({ message }: { message: string }) {
+  const isForbidden = /forbidden|not found|403|404/i.test(message);
   return (
     <div className="flex flex-col gap-6">
       <Link
         href="/dashboard/projects"
-        className="inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex w-fit items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <ArrowLeft className="size-3.5" /> Back to projects
       </Link>
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <ShieldAlert className="size-5" />
+      <div className="mx-auto w-full max-w-md rounded-xl border border-destructive/20 bg-card p-8 text-center shadow-sm">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive ring-1 ring-destructive/20">
+          <ShieldAlert className="size-6" />
         </div>
-        <p className="mt-4 text-sm font-medium">Couldn&apos;t load project</p>
-        <p className="mt-1 text-xs text-muted-foreground">{message}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          onClick={() => {
-            toast.info("Retrying…");
-            window.location.reload();
-          }}
-        >
-          <RefreshCw className="mr-2 size-3.5" /> Retry
-        </Button>
+        <p className="mt-5 text-base font-semibold text-foreground">
+          {isForbidden ? "Can't open this project" : "Couldn't load project"}
+        </p>
+        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+          {message ||
+            "Something went wrong while loading this project. Please try again."}
+        </p>
+        <div className="mt-5 flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+          >
+            <Link href="/dashboard/projects">
+              <ArrowLeft className="mr-1.5 size-3.5" /> Back
+            </Link>
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              toast.info("Retrying…");
+              window.location.reload();
+            }}
+          >
+            <RefreshCw className="mr-1.5 size-3.5" /> Retry
+          </Button>
+        </div>
       </div>
     </div>
   );
