@@ -61,6 +61,7 @@ type Props = {
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: string;
+  maxHeight?: string;
   invalid?: boolean;
   onFocus?: () => void;
   mentionUsers?: MentionUser[];
@@ -256,6 +257,7 @@ export function RichTextEditor({
   onChange,
   placeholder = "Write… @mention people, #link tasks, paste URLs",
   minHeight = "min-h-24",
+  maxHeight = "max-h-80",
   invalid = false,
   onFocus,
   mentionUsers,
@@ -710,7 +712,9 @@ export function RichTextEditor({
           <Redo className="size-3.5" />
         </ToolbarButton>
       </div>
-      <EditorContent editor={editor} />
+      <div className={cn("overflow-y-auto", maxHeight)}>
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }

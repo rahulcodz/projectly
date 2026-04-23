@@ -14,6 +14,7 @@ import {
   List as ListIcon,
   Pencil,
   Search,
+  Trash2,
   UserCircle2,
   Users,
   X,
@@ -21,6 +22,16 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -253,8 +264,34 @@ export default function TasksPage() {
   }
 
   const isUser = session?.role === "user";
+  const isAdmin = session?.role === "admin";
   const isManager =
     session?.role === "admin" || session?.role === "project_manager";
+
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDeleteTask() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/tasks/${pendingDelete._id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete task");
+      }
+      setTasks((ts) => ts.filter((t) => t._id !== pendingDelete._id));
+      setTotal((n) => Math.max(0, n - 1));
+      toast.success("Task deleted");
+      setPendingDelete(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete task");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const permsFor = useCallback(
     (t: Task) => {
@@ -553,6 +590,8 @@ export default function TasksPage() {
           openEditTask={openEditTask}
           openViewTask={openViewTask}
           permsFor={permsFor}
+          isAdmin={isAdmin}
+          onDelete={setPendingDelete}
         />
       ) : (
         <>
@@ -652,6 +691,17 @@ export default function TasksPage() {
                                 <Pencil className="size-3.5" />
                               </button>
                             )}
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                aria-label="Delete task"
+                                title="Delete task"
+                                onClick={() => setPendingDelete(t)}
+                                className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover/title:opacity-100"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="px-3 py-2.5">
@@ -722,16 +772,29 @@ export default function TasksPage() {
                     key={t._id}
                     className={cn("flex flex-col gap-2 p-4", STATUS_ROW_BG[t.status])}
                   >
-                    {t.project ? (
-                      <Link
-                        href={`/dashboard/projects/${t.project._id}?task=${t._id}`}
-                        className="font-medium hover:text-primary hover:underline"
-                      >
-                        {t.title}
-                      </Link>
-                    ) : (
-                      <span className="font-medium">{t.title}</span>
-                    )}
+                    <div className="flex items-start justify-between gap-2">
+                      {t.project ? (
+                        <Link
+                          href={`/dashboard/projects/${t.project._id}?task=${t._id}`}
+                          className="font-medium hover:text-primary hover:underline"
+                        >
+                          {t.title}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{t.title}</span>
+                      )}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          aria-label="Delete task"
+                          title="Delete task"
+                          onClick={() => setPendingDelete(t)}
+                          className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <TaskStatusBadge status={t.status} />
                       {t.project && (
@@ -849,6 +912,35 @@ export default function TasksPage() {
         submitting={editSubmitting}
         onSubmit={handleSaveEdit}
       />
+
+      <AlertDialog
+        open={Boolean(pendingDelete)}
+        onOpenChange={(open) => !open && !deleting && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `"${pendingDelete.title}" will be permanently deleted. This cannot be undone.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDeleteTask();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -864,6 +956,8 @@ function BoardView({
   openEditTask,
   openViewTask,
   permsFor,
+  isAdmin,
+  onDelete,
 }: {
   loading: boolean;
   boardTasks: Record<TaskStatusKey, Task[]>;
@@ -875,6 +969,8 @@ function BoardView({
   openEditTask: (t: Task) => void;
   openViewTask: (t: Task) => void;
   permsFor: (t: Task) => { canEdit: boolean; canMove: boolean };
+  isAdmin: boolean;
+  onDelete: (t: Task) => void;
 }) {
   if (loading) {
     return (
@@ -939,8 +1035,10 @@ function BoardView({
                         dragging={draggingId === t._id}
                         canEdit={canEdit}
                         canMove={canMove}
+                        canDelete={isAdmin}
                         onEdit={() => openEditTask(t)}
                         onView={() => openViewTask(t)}
+                        onDelete={() => onDelete(t)}
                         onDragStart={() => setDraggingId(t._id)}
                         onDragEnd={() => {
                           setDraggingId(null);
@@ -964,8 +1062,10 @@ function BoardCard({
   dragging,
   canEdit,
   canMove,
+  canDelete,
   onEdit,
   onView,
+  onDelete,
   onDragStart,
   onDragEnd,
 }: {
@@ -973,8 +1073,10 @@ function BoardCard({
   dragging: boolean;
   canEdit: boolean;
   canMove: boolean;
+  canDelete: boolean;
   onEdit: () => void;
   onView: () => void;
+  onDelete: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
@@ -1019,23 +1121,42 @@ function BoardCard({
           ) : null}
           <PriorityBadge priority={task.priority} />
         </div>
-        {canEdit ? (
-          <button
-            type="button"
-            aria-label="Edit task"
-            title="Edit task"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onEdit();
-            }}
-            draggable={false}
-            onDragStart={(e) => e.stopPropagation()}
-            className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary group-hover:opacity-100"
-          >
-            <Pencil className="size-3.5" />
-          </button>
-        ) : null}
+        <div className="flex items-center gap-0.5">
+          {canEdit ? (
+            <button
+              type="button"
+              aria-label="Edit task"
+              title="Edit task"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEdit();
+              }}
+              draggable={false}
+              onDragStart={(e) => e.stopPropagation()}
+              className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-primary group-hover:opacity-100"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              type="button"
+              aria-label="Delete task"
+              title="Delete task"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete();
+              }}
+              draggable={false}
+              onDragStart={(e) => e.stopPropagation()}
+              className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
       </div>
       {task.project ? (
         <Link

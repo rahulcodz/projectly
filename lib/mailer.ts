@@ -53,19 +53,45 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/* Theme palette (email-safe hex, matched to app warm/terracotta theme) */
+const C = {
+  pageBg: "#f4efe3",
+  cardBg: "#fbf8ef",
+  surface: "#f6f0df",
+  surfaceSoft: "#f0e9d4",
+  border: "#e4dcc5",
+  borderSoft: "#efe8d3",
+  divider: "#ece4cc",
+  text: "#2b2319",
+  textBody: "#4a4235",
+  textMuted: "#8a8275",
+  textSubtle: "#a69e8a",
+  chipBg: "#f1ead4",
+  chipBorder: "#e0d6ba",
+  primary: "#c9632f",
+  primaryHover: "#b15626",
+  success: "#2f7d4e",
+  danger: "#c4452e",
+  info: "#3f6d8c",
+} as const;
+
+const FONT =
+  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
+
 type HeaderTone = "primary" | "success" | "danger" | "info";
 
-function toneButtonBg(tone: HeaderTone): string {
+function toneColor(tone: HeaderTone): string {
   switch (tone) {
     case "success":
-      return "#059669";
+      return C.success;
     case "danger":
-      return "#dc2626";
+      return C.danger;
     case "info":
-      return "#4f46e5";
+      return C.info;
     case "primary":
     default:
-      return "#ea580c";
+      return C.primary;
   }
 }
 
@@ -81,23 +107,23 @@ function layout(opts: {
   title: string;
 }): string {
   const tone = opts.tone ?? "primary";
-  const btnBg = toneButtonBg(tone);
+  const accent = toneColor(tone);
 
   const cta =
     opts.ctaLabel && opts.ctaUrl
       ? `
-        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;">
           <tr>
-            <td style="border-radius:10px;background:${btnBg};">
-              <a href="${opts.ctaUrl}" style="display:inline-block;padding:12px 22px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">${escapeHtml(
+            <td align="center" bgcolor="${accent}" style="border-radius:10px;background:${accent};">
+              <a href="${opts.ctaUrl}" style="display:inline-block;padding:13px 26px;font-family:${FONT};font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;letter-spacing:0.01em;">${escapeHtml(
                 opts.ctaLabel
               )}</a>
             </td>
           </tr>
         </table>
-        <p style="margin:0 0 6px;color:#64748b;font-size:12px;line-height:18px;">Or paste this link into your browser:</p>
-        <p style="margin:0 0 20px;word-break:break-all;">
-          <a href="${opts.ctaUrl}" style="color:${btnBg};font-size:12px;text-decoration:underline;">${opts.ctaUrl}</a>
+        <p style="margin:0 0 6px;font-family:${FONT};color:${C.textMuted};font-size:12px;line-height:18px;">Or paste this link into your browser:</p>
+        <p style="margin:0 0 24px;word-break:break-all;font-family:${FONT};">
+          <a href="${opts.ctaUrl}" style="color:${accent};font-size:12px;text-decoration:underline;">${opts.ctaUrl}</a>
         </p>`
       : "";
 
@@ -108,26 +134,32 @@ function layout(opts: {
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>${escapeHtml(opts.title)}</title>
   </head>
-  <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <body style="margin:0;padding:0;background:${C.pageBg};font-family:${FONT};">
     <span style="display:none !important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;">${escapeHtml(
       opts.preheader
     )}</span>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.pageBg};padding:40px 16px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06),0 8px 24px rgba(15,23,42,0.08);">
+          <table role="presentation" width="580" cellpadding="0" cellspacing="0" border="0" style="max-width:580px;width:100%;background:${C.cardBg};border:1px solid ${C.border};border-radius:14px;overflow:hidden;">
             <tr>
-              <td style="padding:32px 32px 8px;background:#ffffff;color:#0f172a;">
-                <div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:20px;">
-                  <span style="display:inline-block;width:32px;height:32px;border-radius:8px;background:${btnBg};color:#ffffff;text-align:center;line-height:32px;font-weight:700;font-size:15px;">P</span>
-                  <span style="font-weight:700;font-size:18px;letter-spacing:-0.01em;color:#0f172a;">Projectly</span>
-                </div>
-                <h1 style="margin:0 0 6px;font-size:22px;line-height:30px;letter-spacing:-0.015em;color:#0f172a;">${escapeHtml(
+              <td style="height:4px;background:${accent};line-height:4px;font-size:0;">&nbsp;</td>
+            </tr>
+            <tr>
+              <td style="padding:32px 36px 4px;background:${C.cardBg};">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+                  <tr>
+                    <td width="36" height="36" align="center" valign="middle" style="width:36px;height:36px;background:${C.primary};border-radius:8px;font-family:${FONT};font-weight:700;font-size:15px;color:#ffffff;line-height:36px;">P</td>
+                    <td width="10" style="width:10px;font-size:0;line-height:0;">&nbsp;</td>
+                    <td valign="middle" style="font-family:${FONT};font-weight:700;font-size:18px;letter-spacing:-0.01em;color:${C.text};line-height:36px;">Projectly</td>
+                  </tr>
+                </table>
+                <h1 style="margin:0 0 8px;font-family:${FONT};font-size:22px;line-height:30px;letter-spacing:-0.015em;color:${C.text};font-weight:700;">${escapeHtml(
                   opts.heading
                 )}</h1>
                 ${
                   opts.subHeading
-                    ? `<p style="margin:0;font-size:13px;line-height:20px;color:#64748b;">${escapeHtml(
+                    ? `<p style="margin:0 0 4px;font-family:${FONT};font-size:13px;line-height:20px;color:${C.textMuted};">${escapeHtml(
                         opts.subHeading
                       )}</p>`
                     : ""
@@ -135,21 +167,21 @@ function layout(opts: {
               </td>
             </tr>
             <tr>
-              <td style="padding:20px 32px 8px;">
+              <td style="padding:24px 36px 8px;font-family:${FONT};">
                 ${opts.bodyHtml}
                 ${cta}
               </td>
             </tr>
             <tr>
-              <td style="padding:16px 32px 28px;border-top:1px solid #f1f5f9;">
-                <p style="margin:0;color:#94a3b8;font-size:12px;line-height:18px;">${
+              <td style="padding:20px 36px 28px;border-top:1px solid ${C.divider};background:${C.surface};">
+                <p style="margin:0;font-family:${FONT};color:${C.textMuted};font-size:12px;line-height:18px;">${
                   opts.footerNote ??
                   "You're receiving this email because of your Projectly account activity."
                 }</p>
               </td>
             </tr>
           </table>
-          <p style="margin:14px 0 0;color:#94a3b8;font-size:11px;">Projectly · Project Management</p>
+          <p style="margin:16px 0 0;font-family:${FONT};color:${C.textSubtle};font-size:11px;line-height:16px;">Projectly &middot; Project Management</p>
         </td>
       </tr>
     </table>
@@ -159,15 +191,30 @@ function layout(opts: {
 
 function metaRow(label: string, value: string): string {
   return `<tr>
-    <td style="padding:6px 0;color:#64748b;font-size:12px;line-height:18px;width:110px;">${escapeHtml(
+    <td style="padding:10px 0;font-family:${FONT};color:${C.textMuted};font-size:12px;line-height:18px;width:120px;vertical-align:top;">${escapeHtml(
       label
     )}</td>
-    <td style="padding:6px 0;color:#0f172a;font-size:13px;line-height:18px;font-weight:500;">${value}</td>
+    <td style="padding:10px 0;font-family:${FONT};color:${C.text};font-size:13px;line-height:20px;font-weight:500;vertical-align:top;">${value}</td>
   </tr>`;
 }
 
 function metaTable(rows: string): string {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;width:100%;border-top:1px solid #f1f5f9;border-bottom:1px solid #f1f5f9;">${rows}</table>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 24px;width:100%;border-top:1px solid ${C.divider};border-bottom:1px solid ${C.divider};">${rows}</table>`;
+}
+
+function codeChip(text: string): string {
+  return `<span style="display:inline-block;font-family:${MONO};background:${C.chipBg};border:1px solid ${C.chipBorder};padding:2px 8px;border-radius:5px;font-size:11px;color:${C.textBody};line-height:16px;">${escapeHtml(
+    text
+  )}</span>`;
+}
+
+function paragraph(html: string, opts?: { muted?: boolean }): string {
+  const color = opts?.muted ? C.textMuted : C.textBody;
+  return `<p style="margin:0 0 16px;font-family:${FONT};color:${color};font-size:14px;line-height:22px;">${html}</p>`;
+}
+
+function strong(text: string): string {
+  return `<strong style="color:${C.text};font-weight:600;">${escapeHtml(text)}</strong>`;
 }
 
 /* -------------------- Invite email -------------------- */
@@ -180,18 +227,19 @@ export async function sendInviteEmail(opts: {
   expiresHours: number;
 }): Promise<void> {
   const transporter = getTransporter();
-  const body = `
-    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:22px;">${
+  const body =
+    paragraph(
       opts.inviterName
-        ? `${escapeHtml(
-            opts.inviterName
-          )} invited you to collaborate on <strong style="color:#0f172a;">Projectly</strong>.`
-        : `You've been invited to collaborate on <strong style="color:#0f172a;">Projectly</strong>.`
-    }</p>
-    <p style="margin:0 0 20px;color:#334155;font-size:14px;line-height:22px;">Click below to set your password and sign in. The link expires in ${
-      opts.expiresHours
-    } hours.</p>
-  `;
+        ? `${strong(opts.inviterName)} invited you to collaborate on ${strong(
+            "Projectly"
+          )}.`
+        : `You've been invited to collaborate on ${strong("Projectly")}.`
+    ) +
+    paragraph(
+      `Click the button below to set your password and sign in. The link expires in ${escapeHtml(
+        String(opts.expiresHours)
+      )} hours.`
+    );
 
   const html = layout({
     title: "You're invited to Projectly",
@@ -242,12 +290,7 @@ export async function sendProjectAssignedEmail(
   const meta = metaTable(
     [
       metaRow("Project", escapeHtml(opts.project.name)),
-      metaRow(
-        "Project ID",
-        `<span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f8fafc;border:1px solid #e2e8f0;padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(
-          opts.project.projectId
-        )}</span>`
-      ),
+      metaRow("Project ID", codeChip(opts.project.projectId)),
       metaRow("Your role", escapeHtml(roleLabel)),
       opts.project.status
         ? metaRow("Status", escapeHtml(opts.project.status))
@@ -255,20 +298,17 @@ export async function sendProjectAssignedEmail(
     ].join("")
   );
 
-  const body = `
-    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:22px;">Hi ${escapeHtml(
-      opts.recipientName
-    )},</p>
-    <p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:22px;">${
+  const body =
+    paragraph(`Hi ${escapeHtml(opts.recipientName)},`) +
+    paragraph(
       opts.actorName
-        ? `<strong style="color:#0f172a;">${escapeHtml(
-            opts.actorName
-          )}</strong> added you to a project.`
+        ? `${strong(opts.actorName)} added you to a project.`
         : `You've been added to a project.`
-    }</p>
-    ${meta}
-    <p style="margin:0 0 20px;color:#334155;font-size:14px;line-height:22px;">Open the project to see details, recent activity, and tasks.</p>
-  `;
+    ) +
+    meta +
+    paragraph(
+      "Open the project to see details, recent activity, and tasks."
+    );
 
   const html = layout({
     title: "You've been added to a project",
@@ -306,30 +346,22 @@ export async function sendProjectUnassignedEmail(
   const meta = metaTable(
     [
       metaRow("Project", escapeHtml(opts.project.name)),
-      metaRow(
-        "Project ID",
-        `<span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f8fafc;border:1px solid #e2e8f0;padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(
-          opts.project.projectId
-        )}</span>`
-      ),
+      metaRow("Project ID", codeChip(opts.project.projectId)),
       metaRow("Former role", escapeHtml(roleLabel)),
     ].join("")
   );
 
-  const body = `
-    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:22px;">Hi ${escapeHtml(
-      opts.recipientName
-    )},</p>
-    <p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:22px;">${
+  const body =
+    paragraph(`Hi ${escapeHtml(opts.recipientName)},`) +
+    paragraph(
       opts.actorName
-        ? `<strong style="color:#0f172a;">${escapeHtml(
-            opts.actorName
-          )}</strong> removed you from a project.`
+        ? `${strong(opts.actorName)} removed you from a project.`
         : "You've been removed from a project."
-    }</p>
-    ${meta}
-    <p style="margin:0 0 20px;color:#334155;font-size:14px;line-height:22px;">You'll no longer see updates from this project. If this was unexpected, reach out to your project manager.</p>
-  `;
+    ) +
+    meta +
+    paragraph(
+      "You'll no longer see updates from this project. If this was unexpected, reach out to your project manager."
+    );
 
   const html = layout({
     title: "Removed from a project",
@@ -380,12 +412,7 @@ export async function sendMentionEmail(opts: MentionMailOpts): Promise<void> {
 
   const metaRows = [
     metaRow("Project", escapeHtml(opts.project.name)),
-    metaRow(
-      "Project ID",
-      `<span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f8fafc;border:1px solid #e2e8f0;padding:2px 6px;border-radius:4px;font-size:11px;">${escapeHtml(
-        opts.project.projectId
-      )}</span>`
-    ),
+    metaRow("Project ID", codeChip(opts.project.projectId)),
     opts.context === "task" && opts.task
       ? metaRow("Task", escapeHtml(opts.task.title))
       : "",
@@ -393,23 +420,24 @@ export async function sendMentionEmail(opts: MentionMailOpts): Promise<void> {
 
   const meta = metaTable(metaRows);
 
-  const body = `
-    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:22px;">Hi ${escapeHtml(
-      opts.recipientName
-    )},</p>
-    <p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:22px;">${
+  const commentBlock = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;width:100%;">
+    <tr>
+      <td style="padding:14px 16px;background:${C.surfaceSoft};border:1px solid ${C.border};border-left:3px solid ${C.info};border-radius:8px;font-family:${FONT};color:${C.text};font-size:13px;line-height:20px;">${opts.commentHtml}</td>
+    </tr>
+  </table>`;
+
+  const body =
+    paragraph(`Hi ${escapeHtml(opts.recipientName)},`) +
+    paragraph(
       opts.actorName
-        ? `<strong style="color:#0f172a;">${escapeHtml(
-            opts.actorName
-          )}</strong> mentioned you in a ${contextLabel} discussion.`
+        ? `${strong(opts.actorName)} mentioned you in a ${contextLabel} discussion.`
         : `You were mentioned in a ${contextLabel} discussion.`
-    }</p>
-    ${meta}
-    <div style="margin:0 0 20px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;color:#0f172a;font-size:13px;line-height:20px;">${
-      opts.commentHtml
-    }</div>
-    <p style="margin:0 0 20px;color:#334155;font-size:14px;line-height:22px;">Open the ${contextLabel} to reply or see the full thread.</p>
-  `;
+    ) +
+    meta +
+    commentBlock +
+    paragraph(
+      `Open the ${contextLabel} to reply or see the full thread.`
+    );
 
   const html = layout({
     title: `You were mentioned`,
@@ -456,34 +484,30 @@ export async function sendTaskAssignedEmail(opts: TaskMailOpts): Promise<void> {
   const roleLabel =
     opts.role === "reportingPerson" ? "Reporting person" : "Assignee";
 
+  const projectValue = `${escapeHtml(opts.project.name)} &nbsp;${codeChip(
+    opts.project.projectId
+  )}`;
+
   const meta = metaTable(
     [
       metaRow("Task", escapeHtml(opts.task.title)),
-      metaRow(
-        "Project",
-        `${escapeHtml(opts.project.name)} · <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#64748b;font-size:11px;">${escapeHtml(
-          opts.project.projectId
-        )}</span>`
-      ),
+      metaRow("Project", projectValue),
       opts.task.status ? metaRow("Status", escapeHtml(opts.task.status)) : "",
       metaRow("Your role", escapeHtml(roleLabel)),
     ].join("")
   );
 
-  const body = `
-    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:22px;">Hi ${escapeHtml(
-      opts.recipientName
-    )},</p>
-    <p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:22px;">${
+  const body =
+    paragraph(`Hi ${escapeHtml(opts.recipientName)},`) +
+    paragraph(
       opts.actorName
-        ? `<strong style="color:#0f172a;">${escapeHtml(
-            opts.actorName
-          )}</strong> assigned you to a task.`
+        ? `${strong(opts.actorName)} assigned you to a task.`
         : "You've been assigned to a task."
-    }</p>
-    ${meta}
-    <p style="margin:0 0 20px;color:#334155;font-size:14px;line-height:22px;">Open the task to see the description, subtasks, and discussion.</p>
-  `;
+    ) +
+    meta +
+    paragraph(
+      "Open the task to see the description, subtasks, and discussion."
+    );
 
   const html = layout({
     title: "New task assignment",
@@ -518,33 +542,27 @@ export async function sendTaskUnassignedEmail(
   const roleLabel =
     opts.role === "reportingPerson" ? "Reporting person" : "Assignee";
 
+  const projectValue = `${escapeHtml(opts.project.name)} &nbsp;${codeChip(
+    opts.project.projectId
+  )}`;
+
   const meta = metaTable(
     [
       metaRow("Task", escapeHtml(opts.task.title)),
-      metaRow(
-        "Project",
-        `${escapeHtml(opts.project.name)} · <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#64748b;font-size:11px;">${escapeHtml(
-          opts.project.projectId
-        )}</span>`
-      ),
+      metaRow("Project", projectValue),
       metaRow("Former role", escapeHtml(roleLabel)),
     ].join("")
   );
 
-  const body = `
-    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:22px;">Hi ${escapeHtml(
-      opts.recipientName
-    )},</p>
-    <p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:22px;">${
+  const body =
+    paragraph(`Hi ${escapeHtml(opts.recipientName)},`) +
+    paragraph(
       opts.actorName
-        ? `<strong style="color:#0f172a;">${escapeHtml(
-            opts.actorName
-          )}</strong> removed you from a task.`
+        ? `${strong(opts.actorName)} removed you from a task.`
         : "You've been removed from a task."
-    }</p>
-    ${meta}
-    <p style="margin:0 0 20px;color:#334155;font-size:14px;line-height:22px;">You'll no longer receive updates for this task.</p>
-  `;
+    ) +
+    meta +
+    paragraph("You'll no longer receive updates for this task.");
 
   const html = layout({
     title: "Removed from a task",
