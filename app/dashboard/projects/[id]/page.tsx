@@ -1083,6 +1083,10 @@ export default function ProjectDetailPage() {
     .map((id) => tasks.find((t) => t._id === id))
     .filter((t): t is Task => Boolean(t));
 
+  const pendingTaskTabIds = openTaskIds.filter(
+    (id) => !tasks.some((t) => t._id === id)
+  );
+
   return (
     <div className="-mx-4 -my-6 flex min-h-[calc(100vh-3.5rem)] flex-col sm:-mx-6 sm:-my-8 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:overflow-hidden">
       <div className="flex flex-1 min-w-0 flex-col lg:min-h-0">
@@ -1122,6 +1126,16 @@ export default function ProjectDetailPage() {
                 <Paperclip className="size-4 text-muted-foreground group-data-[state=active]:text-primary" />
                 <span>Files</span>
               </TabsTrigger>
+              {pendingTaskTabIds.map((tid) => (
+                <TabsTrigger
+                  key={tid}
+                  value={`task:${tid}`}
+                  className={cn(chromeTabClasses, "pr-1.5")}
+                >
+                  <Skeleton className="size-2 rounded-full" />
+                  <Skeleton className="h-3 w-24" />
+                </TabsTrigger>
+              ))}
               {openTaskTabs.map((t) => (
                 <TabsTrigger
                   key={t._id}
@@ -2031,6 +2045,16 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </TabsContent>
+
+          {pendingTaskTabIds.map((tid) => (
+            <TabsContent
+              key={tid}
+              value={`task:${tid}`}
+              className="mt-2 flex-1 lg:min-h-0 lg:overflow-y-auto"
+            >
+              <TaskTabSkeleton />
+            </TabsContent>
+          ))}
 
           {openTaskTabs.map((t) => {
             const state = taskTabs[t._id];
@@ -3342,6 +3366,52 @@ function DetailError({ message }: { message: string }) {
           >
             <RefreshCw className="mr-1.5 size-3.5" /> Retry
           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TaskTabSkeleton() {
+  return (
+    <div className="flex flex-col gap-0">
+      <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2 sm:px-6">
+        <Skeleton className="size-3.5 rounded" />
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-4 w-56 flex-1 max-w-md" />
+        <Skeleton className="ml-auto size-7 rounded-md" />
+      </div>
+      <div className="flex flex-wrap items-center gap-3 border-b border-border/40 bg-primary/5 px-4 py-2 sm:px-6">
+        <Skeleton className="h-7 w-32 rounded-md" />
+        <Skeleton className="h-6 w-40 rounded-full" />
+      </div>
+      <div className="px-4 py-4 sm:px-6 space-y-5">
+        <div className="rounded-lg border bg-card/40 p-4 space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-5/6" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-16" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Skeleton className="size-4 rounded" />
+              <Skeleton className="h-3 flex-1 max-w-md" />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-3 w-20" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <Skeleton className="size-7 shrink-0 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
