@@ -11,7 +11,7 @@ import { getSession } from "@/lib/auth";
 import { getProjectForSession } from "@/lib/project-access";
 import { validationResponse } from "@/lib/api-errors";
 import { extractMentionIds, sanitizeRichHtml, stripHtml } from "@/lib/sanitize";
-import { getAppUrl, sendMentionEmail } from "@/lib/mailer";
+import { createNotifications, type NotifyInput } from "@/lib/notify";
 
 const createSchema = z.object({
   body: z.string().min(1, "Comment cannot be empty"),
@@ -57,6 +57,14 @@ export async function GET(
           role: session.role,
         };
       }
+      if (!author && key && (c.authorName || c.authorRole)) {
+        author = {
+          _id: key,
+          name: c.authorName || "Unknown",
+          email: c.authorEmail || "",
+          role: c.authorRole || "user",
+        };
+      }
       return { ...c, author };
     });
 
@@ -98,6 +106,9 @@ export async function POST(
     const comment = await Comment.create({
       project: project._id,
       author: new mongoose.Types.ObjectId(session.sub),
+      authorName: session.name,
+      authorEmail: session.email,
+      authorRole: session.role,
       body: sanitized,
     });
 
@@ -144,21 +155,18 @@ export async function POST(
           const users = await User.find({ _id: { $in: recipientIds } })
             .select("name email")
             .lean();
-          const projectUrl = `${getAppUrl()}/dashboard/projects/${String(
-            project._id
-          )}`;
-          const mailJobs = users.map((u) =>
-            sendMentionEmail({
-              to: u.email,
-              recipientName: u.name,
-              actorName: session.name,
-              context: "project",
-              project: { name: project.name, projectId: project.projectId },
-              commentHtml: sanitized,
-              url: projectUrl,
-            })
-          );
-          Promise.allSettled(mailJobs).catch(() => {});
+
+          const snippet = stripHtml(sanitized).slice(0, 140);
+          const notifyItems: NotifyInput[] = users.map((u) => ({
+            recipient: String(u._id),
+            actor: session.sub,
+            type: "mention_project",
+            project: String(project._id),
+            comment: String(comment._id),
+            message: `${session.name} mentioned you in project "${project.name}"`,
+            data: { snippet, projectId: project.projectId },
+          }));
+          createNotifications(notifyItems);
         }
       }
     } catch {

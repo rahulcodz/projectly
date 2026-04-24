@@ -14,6 +14,7 @@ import {
   getAppUrl,
   sendProjectAssignedEmail,
 } from "@/lib/mailer";
+import { createNotifications, type NotifyInput } from "@/lib/notify";
 
 const createSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters"),
@@ -188,6 +189,18 @@ export async function POST(req: NextRequest) {
           })
         )
       ).catch(() => {});
+
+      const notifyItems: NotifyInput[] = recipients.map((r) => ({
+        recipient: String(r.user._id),
+        actor: session.sub,
+        type: "project_assigned",
+        project: String(populated._id),
+        message: `${actorName} assigned you to project "${populated.name}" as ${
+          r.role === "assignee" ? "assignee" : "reporting"
+        }`,
+        data: { role: r.role, projectId: populated.projectId },
+      }));
+      createNotifications(notifyItems);
     }
 
     return NextResponse.json({ project: populated }, { status: 201 });

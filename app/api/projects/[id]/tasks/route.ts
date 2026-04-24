@@ -16,6 +16,7 @@ import { getProjectForSession } from "@/lib/project-access";
 import { fieldError, validationResponse } from "@/lib/api-errors";
 import { sanitizeRichHtml } from "@/lib/sanitize";
 import { getAppUrl, sendTaskAssignedEmail } from "@/lib/mailer";
+import { createNotifications, type NotifyInput } from "@/lib/notify";
 
 const isoDate = z
   .union([z.string().datetime(), z.literal(""), z.null()])
@@ -187,6 +188,23 @@ export async function POST(
             })
           )
         ).catch(() => {});
+
+        const notifyItems: NotifyInput[] = recipients.map((r) => ({
+          recipient: String(r.user._id),
+          actor: session.sub,
+          type: "task_assigned",
+          project: projectMeta._id,
+          task: String(populated._id),
+          message: `${session.name} assigned you to task "${populated.title}" as ${
+            r.role === "assignee" ? "assignee" : "reporting"
+          }`,
+          data: {
+            role: r.role,
+            taskId: populated.taskId,
+            projectId: projectMeta.projectId,
+          },
+        }));
+        createNotifications(notifyItems);
       } catch {
         // swallow mail errors
       }

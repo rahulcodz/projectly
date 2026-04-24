@@ -19,10 +19,10 @@ import { fieldError, validationResponse } from "@/lib/api-errors";
 import { sanitizeRichHtml } from "@/lib/sanitize";
 import {
   getAppUrl,
-  sendMentionEmail,
   sendTaskAssignedEmail,
   sendTaskUnassignedEmail,
 } from "@/lib/mailer";
+import { createNotifications, type NotifyInput } from "@/lib/notify";
 
 const subtaskSchema = z.object({
   _id: z.string().optional(),
@@ -317,6 +317,47 @@ export async function PATCH(
             );
 
             Promise.allSettled(tasks).catch(() => {});
+
+            const notifyItems: NotifyInput[] = [];
+            const addNotify = (
+              uid: string,
+              role: "assignee" | "reportingPerson",
+              kind: "task_assigned" | "task_unassigned"
+            ) => {
+              if (uid === session.sub) return;
+              if (!byId.get(uid)) return;
+              notifyItems.push({
+                recipient: uid,
+                actor: session.sub,
+                type: kind,
+                project: projectMeta._id,
+                task: String(updated._id),
+                message:
+                  kind === "task_assigned"
+                    ? `${session.name} assigned you to task "${updated.title}" as ${
+                        role === "assignee" ? "assignee" : "reporting"
+                      }`
+                    : `${session.name} removed you from task "${updated.title}" (${
+                        role === "assignee" ? "assignee" : "reporting"
+                      })`,
+                data: {
+                  role,
+                  taskId: updated.taskId,
+                  projectId: projectMeta.projectId,
+                },
+              });
+            };
+            addedAss.forEach((u) => addNotify(u, "assignee", "task_assigned"));
+            removedAss.forEach((u) =>
+              addNotify(u, "assignee", "task_unassigned")
+            );
+            addedRep.forEach((u) =>
+              addNotify(u, "reportingPerson", "task_assigned")
+            );
+            removedRep.forEach((u) =>
+              addNotify(u, "reportingPerson", "task_unassigned")
+            );
+            createNotifications(notifyItems);
           }
         }
       } catch {
@@ -459,11 +500,64 @@ export async function PATCH(
             logs.map((l) => ({
               task: new mongoose.Types.ObjectId(id),
               author: new mongoose.Types.ObjectId(session.sub),
+              authorName: session.name,
+              authorEmail: session.email,
+              authorRole: session.role,
               body: l.body,
               kind: "system",
               system: l.system,
             }))
           );
+        }
+
+        // Task status change notifications to stakeholders
+        if (
+          parsed.data.status !== undefined &&
+          parsed.data.status !== prevStatus
+        ) {
+          const from = TASK_STATUS_LABELS[prevStatus] ?? prevStatus;
+          const to =
+            TASK_STATUS_LABELS[parsed.data.status] ?? parsed.data.status;
+          const taskTitle = updated.title;
+          const proj = updated.project as unknown as {
+            _id: unknown;
+            projectId: string;
+          } | null;
+
+          const stakeholderIds = new Set<string>();
+          (updated.assignees ?? []).forEach((a) =>
+            stakeholderIds.add(String((a as unknown as { _id: unknown })._id ?? a))
+          );
+          (updated.reportingPersons ?? []).forEach((a) =>
+            stakeholderIds.add(String((a as unknown as { _id: unknown })._id ?? a))
+          );
+          if (updated.createdBy) {
+            stakeholderIds.add(
+              String(
+                (updated.createdBy as unknown as { _id: unknown })._id ??
+                  updated.createdBy
+              )
+            );
+          }
+          stakeholderIds.delete(session.sub);
+
+          const statusNotify: NotifyInput[] = Array.from(stakeholderIds).map(
+            (uid) => ({
+              recipient: uid,
+              actor: session.sub,
+              type: "task_status_changed",
+              project: proj ? String(proj._id) : null,
+              task: String(updated._id),
+              message: `${session.name} changed status of "${taskTitle}" from ${from} to ${to}`,
+              data: {
+                from,
+                to,
+                taskId: updated.taskId,
+                projectId: proj?.projectId,
+              },
+            })
+          );
+          createNotifications(statusNotify);
         }
       } catch {
         // swallow — logging failure shouldn't break update
@@ -493,29 +587,20 @@ export async function PATCH(
               const users = await User.find({ _id: { $in: recipientIds } })
                 .select("name email")
                 .lean();
-              const escSubtask = sm.title
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;");
-              const taskUrl = `${getAppUrl()}/dashboard/projects/${String(
-                project._id
-              )}?task=${String(access.task._id)}`;
-              const mailJobs = users.map((u) =>
-                sendMentionEmail({
-                  to: u.email,
-                  recipientName: u.name,
-                  actorName: session.name,
-                  context: "task",
-                  project: {
-                    name: project.name,
-                    projectId: project.projectId,
-                  },
-                  task: { title: access.task.title },
-                  commentHtml: `<p style="margin:0;"><strong>New subtask:</strong> ${escSubtask}</p>`,
-                  url: taskUrl,
-                })
-              );
-              Promise.allSettled(mailJobs).catch(() => {});
+
+              const notifyItems: NotifyInput[] = users.map((u) => ({
+                recipient: String(u._id),
+                actor: session.sub,
+                type: "mention_subtask",
+                project: String(project._id),
+                task: String(access.task._id),
+                message: `${session.name} mentioned you in subtask "${sm.title}"`,
+                data: {
+                  subtaskTitle: sm.title,
+                  projectId: project.projectId,
+                },
+              }));
+              createNotifications(notifyItems);
             }
           }
         }

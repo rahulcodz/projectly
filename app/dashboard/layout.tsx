@@ -7,6 +7,7 @@ import {
 import { AppSidebar } from "@/components/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { UserMenu } from "@/components/user-menu";
+import { NotificationsBell } from "@/components/notifications-bell";
 import { getSession } from "@/lib/auth";
 
 export default async function DashboardLayout({
@@ -39,7 +40,8 @@ export default async function DashboardLayout({
               Projectly
             </span>
           </div>
-          <div className="ml-auto flex items-center">
+          <div className="ml-auto flex items-center gap-1">
+            <NotificationsBell />
             <UserMenu user={user} />
           </div>
         </header>

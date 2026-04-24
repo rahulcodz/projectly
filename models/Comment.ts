@@ -38,6 +38,9 @@ const CommentSchema = new Schema(
       ref: "User",
       required: true,
     },
+    authorName: { type: String, default: "" },
+    authorEmail: { type: String, default: "" },
+    authorRole: { type: String, default: "" },
     body: { type: String, required: true },
     kind: {
       type: String,

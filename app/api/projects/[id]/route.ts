@@ -15,6 +15,7 @@ import {
   sendProjectAssignedEmail,
   sendProjectUnassignedEmail,
 } from "@/lib/mailer";
+import { createNotifications, type NotifyInput } from "@/lib/notify";
 
 const updateSchema = z.object({
   name: z.string().min(2, "Project name must be at least 2 characters").optional(),
@@ -271,6 +272,38 @@ export async function PATCH(
         }
 
         Promise.allSettled(tasks).catch(() => {});
+
+        const notifyItems: NotifyInput[] = [];
+        const add = (
+          uid: string,
+          role: "assignee" | "reportingTo",
+          kind: "project_assigned" | "project_unassigned"
+        ) => {
+          if (uid === session.sub) return;
+          if (!byId.get(uid)) return;
+          notifyItems.push({
+            recipient: uid,
+            actor: session.sub,
+            type: kind,
+            project: String(project._id),
+            message:
+              kind === "project_assigned"
+                ? `${session.name} assigned you to project "${project.name}" as ${
+                    role === "assignee" ? "assignee" : "reporting"
+                  }`
+                : `${session.name} removed you from project "${project.name}" (${
+                    role === "assignee" ? "assignee" : "reporting"
+                  })`,
+            data: { role, projectId: project.projectId },
+          });
+        };
+        addedAssignees.forEach((u) => add(u, "assignee", "project_assigned"));
+        removedAssignees.forEach((u) =>
+          add(u, "assignee", "project_unassigned")
+        );
+        addedRt.forEach((u) => add(u, "reportingTo", "project_assigned"));
+        removedRt.forEach((u) => add(u, "reportingTo", "project_unassigned"));
+        createNotifications(notifyItems);
       }
     } catch {
       // swallow mail diff errors

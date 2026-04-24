@@ -83,6 +83,14 @@ export async function PATCH(
           role: (u as { role: string }).role,
         };
     }
+    if (!author && raw?.author && (raw.authorName || raw.authorRole)) {
+      author = {
+        _id: String(raw.author),
+        name: raw.authorName || "Unknown",
+        email: raw.authorEmail || "",
+        role: raw.authorRole || "user",
+      };
+    }
     return NextResponse.json({
       comment: raw ? { ...raw, author: author ?? null } : null,
     });

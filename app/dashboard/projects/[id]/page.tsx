@@ -1860,6 +1860,7 @@ export default function ProjectDetailPage() {
                         selected={t.assignees}
                         options={project.assignees}
                         onChange={(next) => updateTaskAssignees(t._id, next)}
+                        canEdit={canEdit}
                       />
                     </TableCell>
                     <TableCell className="px-3 py-1.5">
@@ -2135,6 +2136,7 @@ export default function ProjectDetailPage() {
                         onChange={(next) =>
                           updateTaskAssignees(t._id, next)
                         }
+                        canEdit={canEdit}
                       />
                     </div>
                   </div>
@@ -3478,6 +3480,7 @@ function KanbanCard({
           selected={task.assignees}
           options={projectMembers}
           onChange={onAssigneesChange}
+          canEdit={canEdit}
         />
       </div>
     </div>
@@ -3488,10 +3491,12 @@ function TaskAssigneeRow({
   selected,
   options,
   onChange,
+  canEdit = true,
 }: {
   selected: UserLite[];
   options: UserLite[];
   onChange: (next: UserLite[]) => void;
+  canEdit?: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -3539,27 +3544,31 @@ function TaskAssigneeRow({
                   >
                     {initialsOf(u.name)}
                   </div>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${u.name}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setConfirmUser(u);
-                    }}
-                    className="absolute inset-0 flex items-center justify-center rounded-full border-2 border-background bg-destructive text-white opacity-0 transition-opacity hover:opacity-100"
-                  >
-                    <X className="size-3" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${u.name}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setConfirmUser(u);
+                      }}
+                      className="absolute inset-0 flex items-center justify-center rounded-full border-2 border-background bg-destructive text-white opacity-0 transition-opacity hover:opacity-100"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
                 <div className="text-xs">
                   <div className="font-medium">{u.name}</div>
                   <div className="text-muted-foreground">{u.email}</div>
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">
-                    Click to remove
-                  </div>
+                  {canEdit && (
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                      Click to remove
+                    </div>
+                  )}
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -3567,6 +3576,7 @@ function TaskAssigneeRow({
         </div>
       </TooltipProvider>
 
+      {canEdit && (
       <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
         <PopoverTrigger asChild>
           <button
@@ -3638,6 +3648,7 @@ function TaskAssigneeRow({
           </div>
         </PopoverContent>
       </Popover>
+      )}
 
       <AlertDialog
         open={Boolean(confirmUser)}
