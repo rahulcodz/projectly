@@ -2364,6 +2364,9 @@ export default function ProjectDetailPage() {
                           <TableHead className="h-8 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                             Status
                           </TableHead>
+                           <TableHead className="h-8 w-32 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            Sub Tasks
+                          </TableHead>
                           <TableHead className="h-8 w-28 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                             Priority
                           </TableHead>
@@ -2502,6 +2505,7 @@ export default function ProjectDetailPage() {
                                   )}
                                 </div>
                               )}
+                            
                             </TableCell>
                             <TableCell
                               className="px-3 py-1.5"
@@ -2539,6 +2543,11 @@ export default function ProjectDetailPage() {
                                   ))}
                                 </SelectContent>
                               </Select>
+                            </TableCell>
+                            <TableCell>
+                             <span className="rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
+                              {((t.subtasks ?? []).filter((s) => s.completed).length)}/{(t.subtasks ?? []).length}
+                              </span>
                             </TableCell>
                             <TableCell className="px-3 py-1.5">
                               <PriorityBadge priority={t.priority} />
