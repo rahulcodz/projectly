@@ -2548,6 +2548,7 @@ export default function ProjectDetailPage() {
                              <span className="rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
                               {((t.subtasks ?? []).filter((s) => s.completed).length)}/{(t.subtasks ?? []).length}
                               </span>
+                              
                             </TableCell>
                             <TableCell className="px-3 py-1.5">
                               <PriorityBadge priority={t.priority} />
