@@ -2485,6 +2485,7 @@ export default function ProjectDetailPage() {
                                     className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover/title:opacity-100"
                                   >
                                     <Trash2 className="size-3.5" />
+                                    
                                   </button>
                                 )}
                               </div>
@@ -2548,7 +2549,7 @@ export default function ProjectDetailPage() {
                              <span className="rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
                               {((t.subtasks ?? []).filter((s) => s.completed).length)}/{(t.subtasks ?? []).length}
                               </span>
-                              
+
                             </TableCell>
                             <TableCell className="px-3 py-1.5">
                               <PriorityBadge priority={t.priority} />
