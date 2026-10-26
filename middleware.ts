@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth";
+import { verifySessionToken, SESSION_COOKIE } from "@/lib/session";
 
 const PROTECTED_PREFIXES = ["/dashboard"];
 const ADMIN_ONLY_PREFIXES = ["/dashboard/users"];
