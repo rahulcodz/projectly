@@ -184,6 +184,7 @@ const SUBTASK_DEV_STATUSES = [
   "Done",
   "Not Done/Failed",
   "Improvement",
+  "Regenerated",
 ] as const;
 
 const SUBTASK_DEV_STATUS_STYLES: Record<string, { dot: string; cls: string }> =
@@ -215,6 +216,10 @@ const SUBTASK_DEV_STATUS_STYLES: Record<string, { dot: string; cls: string }> =
     "Improvement": {
       dot: "bg-[#4B4038]",
       cls: "bg-[#4B4038]/10 text-[#4B4038] dark:bg-[#4B4038]/20 dark:text-[#c9a882]",
+    },
+    Regenerated: {
+      dot: "bg-cyan-500",
+      cls: "bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400",
     },
   };
 
@@ -1058,6 +1063,35 @@ export default function ProjectDetailPage() {
   }, [id]);
 
   useEffect(() => {
+    if (openTaskIds.length === 0) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const results = await Promise.all(
+          openTaskIds.map(async (tid) => {
+            const res = await fetch(`/api/tasks/${tid}`);
+            if (!res.ok) return null;
+            const data = await parseJsonResponse<{ task: Task }>(res);
+            return data.task ?? null;
+          }),
+        );
+        if (cancelled) return;
+        setTasks((ts) =>
+          ts.map((t) => {
+            const fresh = results.find((r) => r && r._id === t._id);
+            return fresh ? { ...t, subtasks: fresh.subtasks } : t;
+          }),
+        );
+      } catch {}
+    };
+    const interval = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [openTaskIds]);
+
+  useEffect(() => {
     if (project) loadTasks();
   }, [project, loadTasks]);
 
@@ -1070,7 +1104,7 @@ export default function ProjectDetailPage() {
         if (res.ok) setProjectTags(data.tags ?? []);
       } catch {}
     })();
-  }, [id, tasks]);
+  }, [id]);
 
   const editHandledRef = useRef(false);
   useEffect(() => {
@@ -1498,6 +1532,51 @@ export default function ProjectDetailPage() {
       toast.error(
         err instanceof Error ? err.message : "Failed to update subtasks",
       );
+    }
+  }
+
+  async function addSubtaskRemote(
+    taskId: string,
+    draftSubtask: Subtask,
+    subtaskMention?: { title: string; mentionIds: string[] },
+  ) {
+    const prev = tasks;
+    setTasks((ts) =>
+      ts.map((t) =>
+        t._id === taskId
+          ? { ...t, subtasks: [...(t.subtasks ?? []), draftSubtask] }
+          : t,
+      ),
+    );
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subtaskAdd: {
+            title: draftSubtask.title,
+            assignee: draftSubtask.assignee?._id ?? null,
+          },
+          ...(subtaskMention && subtaskMention.mentionIds.length > 0
+            ? { subtaskMention }
+            : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTasks(prev);
+        toast.error(data.error || "Failed to add subtask");
+        return;
+      }
+      const serverSubtasks = (data.task?.subtasks ?? []) as Subtask[];
+      setTasks((ts) =>
+        ts.map((t) =>
+          t._id === taskId ? { ...t, subtasks: serverSubtasks } : t,
+        ),
+      );
+    } catch (err) {
+      setTasks(prev);
+      toast.error(err instanceof Error ? err.message : "Failed to add subtask");
     }
   }
 
@@ -3816,6 +3895,9 @@ export default function ProjectDetailPage() {
                       onSave={(next, subtaskMention) =>
                         saveSubtasks(t._id, next, subtaskMention)
                       }
+                      onAddSubtask={(draftSubtask, subtaskMention) =>
+                        addSubtaskRemote(t._id, draftSubtask, subtaskMention)
+                      }
                       onReload={loadTasks}
                     />
 
@@ -4651,6 +4733,7 @@ function SubtaskPanel({
   canEdit = true,
   canManage = true,
   onSave,
+  onAddSubtask,
   onReload,
 }: {
   task: Task;
@@ -4668,6 +4751,10 @@ function SubtaskPanel({
     next: Subtask[],
     subtaskMention?: { title: string; mentionIds: string[] },
   ) => void | Promise<void>;
+  onAddSubtask?: (
+    draftSubtask: Subtask,
+    subtaskMention?: { title: string; mentionIds: string[] },
+  ) => void | Promise<void>;
   onReload?: () => void | Promise<void>;
 }) {
   const subtasks = task.subtasks ?? [];
@@ -4675,6 +4762,26 @@ function SubtaskPanel({
   const done = subtasks.filter((s) => s.completed).length;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const allDone = total > 0 && done === total;
+
+  const SUBTASK_FILTER_KEY = "subtaskStatusFilter";
+  const [statusFilter, setStatusFilter] = useState<"all" | "done" | "working">(
+    () => {
+      if (typeof window === "undefined") return "all";
+      const stored = window.localStorage.getItem(SUBTASK_FILTER_KEY);
+      return stored === "done" || stored === "working" ? stored : "all";
+    },
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SUBTASK_FILTER_KEY, statusFilter);
+  }, [statusFilter]);
+
+  const visibleSubtasks = subtasks.filter((s) => {
+    if (statusFilter === "done") return s.completed;
+    if (statusFilter === "working") return !s.completed;
+    return true;
+  });
 
   const [draft, setDraft] = useState("");
   const [adding, setAdding] = useState(false);
@@ -4700,20 +4807,22 @@ function SubtaskPanel({
     e.preventDefault();
     const title = draft.trim();
     if (title.length === 0) return;
-    const next: Subtask[] = [
-      ...subtasks,
-      {
-        _id: `tmp-${Date.now()}`,
-        title,
-        completed: false,
-        completedbydeveloper: "New",
-      },
-    ];
+    const draftSubtask: Subtask = {
+      _id: `tmp-${Date.now()}`,
+      title,
+      completed: false,
+      completedbydeveloper: "New",
+    };
     const mentionIds = title.includes("@") ? Array.from(draftMentions) : [];
+    const mention = mentionIds.length > 0 ? { title, mentionIds } : undefined;
     setDraft("");
     setDraftMentions(new Set());
     setAdding(false);
-    onSave(next, mentionIds.length > 0 ? { title, mentionIds } : undefined);
+    if (onAddSubtask) {
+      onAddSubtask(draftSubtask, mention);
+    } else {
+      onSave([...subtasks, draftSubtask], mention);
+    }
   }
 
   function toggle(id: string) {
@@ -4823,10 +4932,35 @@ function SubtaskPanel({
           </>
         )}
       </div>
+      {total > 0 && (
+        <div className="flex items-center gap-1.5 border-b border-border/40 px-4 py-2 sm:px-6">
+          {(
+            [
+              ["all", "All"],
+              ["done", "Completed"],
+              ["working", "Not Completed"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStatusFilter(value)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                statusFilter === value
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border/60 text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="px-4 py-3 sm:px-6">
-        {total > 0 && (
+        {visibleSubtasks.length > 0 && (
           <ul className="mb-2 flex flex-col gap-2">
-            {subtasks.map((s) => {
+            {visibleSubtasks.map((s) => {
               const isEditing = editingId === s._id;
               return (
                 <li
