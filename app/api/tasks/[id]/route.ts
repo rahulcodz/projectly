@@ -66,6 +66,12 @@ const updateSchema = z.object({
   assignees: z.array(z.string()).optional(),
   reportingPersons: z.array(z.string()).optional(),
   subtasks: z.array(subtaskSchema).optional(),
+  subtaskAdd: z
+    .object({
+      title: z.string().min(1, "Subtask title required"),
+      assignee: z.string().nullable().optional(),
+    })
+    .optional(),
   subtaskMention: z
     .object({
       title: z.string().min(1),
@@ -157,7 +163,11 @@ export async function PATCH(
 
     const requested = Object.keys(parsed.data);
     const collaborativeOnly = requested.every(
-      (k) => k === "subtasks" || k === "status"
+      (k) =>
+        k === "subtasks" ||
+        k === "subtaskAdd" ||
+        k === "subtaskMention" ||
+        k === "status"
     );
     const canCollaborate =
       isAssignee || isReporting || isCreator || canManageProject(session);
@@ -188,10 +198,33 @@ export async function PATCH(
       update.assignedDate = parsed.data.assignedDate;
     if (parsed.data.dueDate !== undefined) update.dueDate = parsed.data.dueDate;
 
+    let pushSubtask: Record<string, unknown> | undefined;
+    if (parsed.data.subtaskAdd !== undefined) {
+      pushSubtask = {
+        _id: new mongoose.Types.ObjectId(),
+        title: parsed.data.subtaskAdd.title,
+        completed: false,
+        completedbydeveloper: "New",
+        assignee:
+          parsed.data.subtaskAdd.assignee &&
+          isValidId(parsed.data.subtaskAdd.assignee)
+            ? new mongoose.Types.ObjectId(parsed.data.subtaskAdd.assignee)
+            : null,
+      };
+    }
+
     const nextSubtasks =
       parsed.data.subtasks !== undefined
         ? parsed.data.subtasks
-        : ((task.subtasks ?? []) as Array<{ title: string; completed: boolean }>);
+        : pushSubtask !== undefined
+          ? [
+              ...((task.subtasks ?? []) as Array<{
+                title: string;
+                completed: boolean;
+              }>),
+              pushSubtask as unknown as { title: string; completed: boolean },
+            ]
+          : ((task.subtasks ?? []) as Array<{ title: string; completed: boolean }>);
 
     if (parsed.data.subtasks !== undefined) {
       update.subtasks = parsed.data.subtasks.map((s) => ({
@@ -241,7 +274,11 @@ export async function PATCH(
     const prevStatus = task.status;
     const prevPriority = task.priority;
 
-    const updated = await Task.findByIdAndUpdate(id, update, { new: true })
+    const mongoUpdate: Record<string, unknown> = {};
+    if (Object.keys(update).length > 0) mongoUpdate.$set = update;
+    if (pushSubtask !== undefined) mongoUpdate.$push = { subtasks: pushSubtask };
+
+    const updated = await Task.findByIdAndUpdate(id, mongoUpdate, { new: true })
       .populate("createdBy", "name email role")
       .populate("assignees", "name email role")
       .populate("reportingPersons", "name email role")
